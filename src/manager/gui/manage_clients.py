@@ -4,7 +4,7 @@ import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QFrame, QSplitter, QListWidget, QLabel,
-    QTextEdit, QPushButton, QFormLayout
+    QTextEdit, QPushButton, QFormLayout, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -213,7 +213,19 @@ class ManageClientsWindow(QWidget):
         else:
             name = display_text
         self.selected_client_id = name
-        token = QApplication.instance().client_connected[index][1]
+        
+        # Kiểm tra index có hợp lệ không (tránh IndexError khi client disconnect)
+        client_connected_list = QApplication.instance().client_connected
+        if index >= len(client_connected_list):
+            print(f"[WARN] Client index {index} out of range. Client đã disconnect.")
+            self.lbl_username.setText(name)
+            self.lbl_email.setText("N/A")
+            self.lbl_fullname.setText("N/A")
+            self.lbl_status.setStyleSheet("font-size: 11pt; font-weight: bold; color: gray;")
+            self.lbl_status.setText("Status: Disconnected")
+            return
+            
+        token = client_connected_list[index][1]
         
         # Kiểm tra xem có auth connection không
         conn = QApplication.instance().conn
@@ -257,11 +269,24 @@ class ManageClientsWindow(QWidget):
         """Mở màn hình xem client - LOGIC MỚI theo 4 trường hợp"""
         if not self.selected_client_id:
             print(f"[ManageClientsWindow] Chưa chọn client nào!")
+            QMessageBox.warning(self, "No Client Selected", "Please select a client first!")
             return
         
         print(f"[ManageClientsWindow] Mở màn hình cho client: {self.selected_client_id}")
         
         # Lấy manager logic
+        manager = QApplication.instance().manager_logic
+        if not manager:
+            print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
+            return
+        
+        # Kiểm tra client có trong danh sách của manager không
+        client_ids = [c['id'] for c in manager.client_list]
+        if self.selected_client_id not in client_ids:
+            print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách rảnh!")
+            QMessageBox.warning(self, "Client Not Available", 
+                              f"Client '{self.selected_client_id}' is not available. It may be disconnected or in another session.")
+            return
         manager = QApplication.instance().manager_logic
         if not manager:
             print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")

@@ -248,3 +248,65 @@
 2025-12-20 15:31:07,870 - src.server.server - INFO - Starting Auth Server in separate thread
 2025-12-20 15:31:07,981 - src.server.server - INFO - Auth Server thread started
 2025-12-20 15:31:08,159 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-20 15:43:20,652 - src.server.server - INFO - 
+================================================================================
+2025-12-20 15:43:20,653 - src.server.server - INFO - Shutdown signal received
+2025-12-20 15:43:20,653 - src.server.server - INFO - ================================================================================
+2025-12-20 15:43:20,654 - src.server.server - INFO - Stopping Main Server...
+2025-12-20 15:43:20,656 - src.server.server - INFO - Main Server stopped
+2025-12-20 15:43:20,656 - src.server.server - INFO - Server shutdown complete
+2025-12-20 15:44:03,730 - src.server.server - INFO - ================================================================================
+2025-12-20 15:44:03,732 - src.server.server - INFO - Starting Unified Server
+2025-12-20 15:44:03,733 - src.server.server - INFO - ================================================================================
+2025-12-20 15:44:03,735 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-20 15:44:03,739 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-20 15:44:03,779 - src.server.server - INFO - Main Server started successfully
+2025-12-20 15:44:03,780 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-20 15:44:03,784 - src.server.server - INFO - Auth Server thread started
+2025-12-20 15:44:03,786 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-20 16:02:34,505 - src.server.server - INFO - 
+================================================================================
+2025-12-20 16:02:34,507 - src.server.server - INFO - Shutdown signal received
+2025-12-20 16:02:34,509 - src.server.server - INFO - ================================================================================
+2025-12-20 16:02:34,511 - src.server.server - INFO - Stopping Main Server...
+2025-12-20 16:02:59,483 - src.server.server - INFO - ================================================================================
+2025-12-20 16:02:59,484 - src.server.server - INFO - Starting Unified Server
+2025-12-20 16:02:59,484 - src.server.server - INFO - ================================================================================
+2025-12-20 16:02:59,487 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-20 16:02:59,491 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-20 16:02:59,572 - src.server.server - INFO - Main Server started successfully
+2025-12-20 16:02:59,649 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-20 16:02:59,802 - src.server.server - INFO - Auth Server thread started
+2025-12-20 16:02:59,972 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-20 16:08:41,285 - src.server.server - INFO - 
+================================================================================
+2025-12-20 16:08:41,285 - src.server.server - INFO - Shutdown signal received
+2025-12-20 16:08:41,286 - src.server.server - INFO - ================================================================================
+2025-12-20 16:08:41,287 - src.server.server - INFO - Stopping Main Server...
+2025-12-20 16:08:41,289 - src.server.server - INFO - Main Server stopped
+2025-12-20 16:08:41,289 - src.server.server - INFO - Server shutdown complete
+2025-12-20 16:09:05,324 - src.server.server - INFO - ================================================================================
+2025-12-20 16:09:05,324 - src.server.server - INFO - Starting Unified Server
+2025-12-20 16:09:05,325 - src.server.server - INFO - ================================================================================
+2025-12-20 16:09:05,326 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-20 16:09:05,326 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-20 16:09:05,331 - src.server.server - INFO - Main Server started successfully
+2025-12-20 16:09:05,332 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-20 16:09:05,333 - src.server.server - INFO - Auth Server thread started
+2025-12-20 16:09:05,333 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-20 16:13:02,773 - src.server.server - INFO - 
+================================================================================
+2025-12-20 16:13:02,773 - src.server.server - INFO - Shutdown signal received
+2025-12-20 16:13:02,774 - src.server.server - INFO - ================================================================================
+2025-12-20 16:13:02,774 - src.server.server - INFO - Stopping Main Server...
+2025-12-20 16:13:02,777 - src.server.server - INFO - Main Server stopped
+2025-12-20 16:13:02,777 - src.server.server - INFO - Server shutdown complete
+2025-12-20 16:13:08,162 - src.server.server - INFO - ================================================================================
+2025-12-20 16:13:08,164 - src.server.server - INFO - Starting Unified Server
+2025-12-20 16:13:08,165 - src.server.server - INFO - ================================================================================
+2025-12-20 16:13:08,166 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-20 16:13:08,167 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-20 16:13:08,171 - src.server.server - INFO - Main Server started successfully
+2025-12-20 16:13:08,172 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-20 16:13:08,173 - src.server.server - INFO - Auth Server thread started
+2025-12-20 16:13:08,176 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
