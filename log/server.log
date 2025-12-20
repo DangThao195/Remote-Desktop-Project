@@ -310,3 +310,12 @@
 2025-12-20 16:13:08,172 - src.server.server - INFO - Starting Auth Server in separate thread
 2025-12-20 16:13:08,173 - src.server.server - INFO - Auth Server thread started
 2025-12-20 16:13:08,176 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-20 18:02:59,242 - src.server.server - INFO - ================================================================================
+2025-12-20 18:02:59,316 - src.server.server - INFO - Starting Unified Server
+2025-12-20 18:02:59,394 - src.server.server - INFO - ================================================================================
+2025-12-20 18:02:59,466 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-20 18:02:59,648 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-20 18:03:00,650 - src.server.server - INFO - Main Server started successfully
+2025-12-20 18:03:00,730 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-20 18:03:00,910 - src.server.server - INFO - Auth Server thread started
+2025-12-20 18:03:01,059 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.

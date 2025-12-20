@@ -32,6 +32,7 @@ class Manager(QObject):
     disconnected_from_server = pyqtSignal()
     cursor_pdu_received = pyqtSignal(object)
     input_pdu_received = pyqtSignal(object)  # Keylog data
+    security_alert_received = pyqtSignal(object)  # Security alerts
 
     def __init__(self, host: str, port: int, manager_id: str = "manager1", username: str = None, password: str = None):
         super().__init__()
@@ -136,7 +137,18 @@ class Manager(QObject):
             print(f"[Manager] {self.current_session_client_id} đang gửi file: {pdu.get('filename')}")
         
     def _on_control_pdu(self, pdu: dict):
-        print(f"[Manager] Control PDU từ client: {pdu.get('message')}")
+        msg = pdu.get('message', '')
+        print(f"[Manager] Control PDU từ client: {msg}")
+        
+        # Kiểm tra xem có phải là security alert không
+        if isinstance(msg, str) and msg.startswith('security_alert:'):
+            print(f"[Manager] 🚨 Nhận được security alert: {msg}")
+            self.security_alert_received.emit(pdu)
+        elif isinstance(msg, bytes) and msg.startswith(b'security_alert:'):
+            # Decode bytes nếu cần
+            pdu['message'] = msg.decode('utf-8')
+            print(f"[Manager] 🚨 Nhận được security alert (decoded): {pdu['message']}")
+            self.security_alert_received.emit(pdu)
     
     def _on_input_pdu(self, pdu: dict):
         """Xử lý INPUT PDU (keylog data) từ client"""
@@ -205,7 +217,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "10.10.58.92"
+    HOST = "192.168.2.31"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 
@@ -258,6 +270,7 @@ if __name__ == "__main__":
     manager_logic.cursor_pdu_received.connect(window.update_cursor_pos)
     manager_logic.error_received.connect(window.show_error)
     manager_logic.input_pdu_received.connect(window.display_keylog)
+    manager_logic.security_alert_received.connect(window.display_security_alert)
     
     window.connect_requested.connect(manager_logic.gui_connect_to_client)
     window.disconnect_requested.connect(manager_logic.gui_disconnect_session)

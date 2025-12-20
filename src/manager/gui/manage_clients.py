@@ -485,6 +485,84 @@ class ManageClientsWindow(QWidget):
             print(f"[ManageClientsWindow] Lỗi hiển thị keylog: {e}")
             import traceback
             traceback.print_exc()
+    
+    def display_security_alert(self, pdu: dict):
+        """Hiển thị cảnh báo vi phạm từ client"""
+        try:
+            message = pdu.get('message', '')
+            
+            # Parse security_alert message
+            # Format: "security_alert:Loại vi phạm|Chi tiết"
+            if message.startswith('security_alert:'):
+                content = message.split(':', 1)[1]
+                if '|' in content:
+                    violation_type, detail = content.split('|', 1)
+                else:
+                    violation_type = 'General'
+                    detail = content
+                
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                
+                # Ghi vào file log
+                self._write_violation_log(timestamp, self.selected_client_id or 'Unknown', violation_type, detail)
+                
+                # HTML formatted alert
+                alert_html = f"""
+                <div style='background-color: rgba(255,0,0,0.15); 
+                            padding: 10px; 
+                            margin: 8px 0; 
+                            border-left: 4px solid #FF4444;
+                            border-radius: 6px;'>
+                    <div style='color: #FF4444; font-weight: bold; font-size: 12pt;'>
+                        🚨 CẢNH BÁO VI PHẠM [{timestamp}]
+                    </div>
+                    <div style='color: {TEXT_LIGHT}; margin: 8px 0;'>
+                        👤 <b>Client:</b> {self.selected_client_id or 'Unknown'}
+                    </div>
+                    <div style='color: #FFA500; margin: 8px 0;'>
+                        ⚠️ <b>Loại vi phạm:</b> {violation_type}
+                    </div>
+                    <div style='color: {TEXT_LIGHT}; font-family: monospace; margin: 8px 0; padding: 8px; background-color: rgba(0,0,0,0.4); border-radius: 4px;'>
+                        📋 <b>Chi tiết:</b><br/>
+                        {detail}
+                    </div>
+                </div>
+                """
+                self.action_area.append(alert_html)
+                
+                # Auto scroll to bottom
+                scrollbar = self.action_area.verticalScrollBar()
+                scrollbar.setValue(scrollbar.maximum())
+                
+                print(f"[ManageClientsWindow] 🚨 Hiển thị cảnh báo vi phạm: {violation_type} - {detail}")
+        except Exception as e:
+            print(f"[ManageClientsWindow] Lỗi hiển thị security alert: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _write_violation_log(self, timestamp, client_id, violation_type, detail):
+        """Ghi log vi phạm vào file"""
+        try:
+            import os
+            from datetime import datetime
+            
+            # Tạo thư mục logs nếu chưa có
+            log_dir = "log"
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+            
+            # Tên file: violations_YYYY-MM-DD.log
+            log_filename = f"{log_dir}/violations_{datetime.now().strftime('%Y-%m-%d')}.log"
+            
+            # Ghi log
+            log_entry = f"[{timestamp}] CLIENT: {client_id} | TYPE: {violation_type} | DETAIL: {detail}\n"
+            with open(log_filename, 'a', encoding='utf-8') as f:
+                f.write(log_entry)
+            
+            print(f"[ManageClientsWindow] ✅ Đã ghi log vi phạm vào file: {log_filename}")
+        except Exception as e:
+            print(f"[ManageClientsWindow] ❌ Lỗi ghi file log: {e}")
             
 # def main():
 #     app = QApplication(sys.argv)

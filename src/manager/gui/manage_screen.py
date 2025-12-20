@@ -211,30 +211,48 @@ class ManageScreenWindow(QWidget):
         x_norm = max(0, min(1, x_norm))
         y_norm = max(0, min(1, y_norm))
 
-        event_type = ""
+        event_dict = None
+        
         if event.type() == QEvent.Type.MouseButtonPress:
-            if event.button() == Qt.MouseButton.LeftButton:
-                event_type = "mouse_left_down"
-            elif event.button() == Qt.MouseButton.RightButton:
-                event_type = "mouse_right_down"
-            elif event.button() == Qt.MouseButton.MiddleButton:
-                event_type = "mouse_middle_down"
-        elif event.type() == QEvent.Type.MouseButtonRelease:
-            if event.button() == Qt.MouseButton.LeftButton:
-                event_type = "mouse_left_up"
-            elif event.button() == Qt.MouseButton.RightButton:
-                event_type = "mouse_right_up"
-            elif event.button() == Qt.MouseButton.MiddleButton:
-                event_type = "mouse_middle_up"
-        elif event.type() == QEvent.Type.MouseMove:
-            event_type = "mouse_move"
-
-        if event_type:
-            event_dict = {
-                "type": event_type,
-                "x": x_norm,
-                "y": y_norm
+            button_map = {
+                Qt.MouseButton.LeftButton: "left",
+                Qt.MouseButton.RightButton: "right",
+                Qt.MouseButton.MiddleButton: "middle"
             }
+            button = button_map.get(event.button())
+            if button:
+                event_dict = {
+                    "type": "mouse_click",
+                    "x_norm": x_norm,
+                    "y_norm": y_norm,
+                    "button": button,
+                    "pressed": True
+                }
+                
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            button_map = {
+                Qt.MouseButton.LeftButton: "left",
+                Qt.MouseButton.RightButton: "right",
+                Qt.MouseButton.MiddleButton: "middle"
+            }
+            button = button_map.get(event.button())
+            if button:
+                event_dict = {
+                    "type": "mouse_click",
+                    "x_norm": x_norm,
+                    "y_norm": y_norm,
+                    "button": button,
+                    "pressed": False
+                }
+                
+        elif event.type() == QEvent.Type.MouseMove:
+            event_dict = {
+                "type": "mouse_move",
+                "x_norm": x_norm,
+                "y_norm": y_norm
+            }
+
+        if event_dict:
             self.input_event_generated.emit(event_dict)
 
         return True
@@ -271,7 +289,8 @@ class ManageScreenWindow(QWidget):
         key_name = key_map.get(key, chr(key).lower() if key < 256 else "")
 
         if key_name:
-            event_type = "key_down" if event.type() == QEvent.Type.KeyPress else "key_up"
+            # Định dạng phù hợp với ClientInputHandler: key_press/key_release
+            event_type = "key_press" if event.type() == QEvent.Type.KeyPress else "key_release"
             event_dict = {
                 "type": event_type,
                 "key": key_name
