@@ -56,6 +56,14 @@ class ClientNetwork:
             # 1. Kết nối socket thô
             raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             raw_sock.settimeout(timeout)
+            
+            # Tăng buffer size để giảm tỷ lệ buffer đầy
+            raw_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512 * 1024)  # 512KB send buffer
+            raw_sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 512 * 1024)  # 512KB recv buffer
+            
+            # Enable TCP keepalive
+            raw_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            
             raw_sock.connect((self.host, self.port))
 
             # 2. Thực hiện X224 Handshake
@@ -188,31 +196,54 @@ class ClientNetwork:
             with self.lock:
                 totalsent = 0
                 data_to_send = tpkt_packet
+                retry_count = 0
+                max_retries = 3
                 
                 while totalsent < len(data_to_send):
-                    sent = self.client.send(data_to_send[totalsent:])
-                    if sent is None: # Sửa điều kiện kiểm tra
-                        raise ConnectionError("Socket broken")
-                    if sent == 0: 
-                        # Socket đang bận/đầy, không nên throw error ngay
-                        # Chờ xíu rồi thử lại hoặc return để ClientSender gửi lại sau
-                        time.sleep(0.01)
+                    try:
+                        sent = self.client.send(data_to_send[totalsent:])
+                        if sent is None:
+                            raise ConnectionError("Socket broken")
+                        if sent == 0:
+                            # Socket đang bận/đầy
+                            retry_count += 1
+                            if retry_count > max_retries:
+                                self.logger(f"[ClientNetwork] Socket busy quá lâu, bỏ qua gói tin.")
+                                return  # Bỏ qua gói này, không crash
+                            time.sleep(0.02)  # Chờ lâu hơn
+                            continue
+                        totalsent += sent
+                        retry_count = 0  # Reset retry count khi gửi thành công
+                        
+                    except BlockingIOError:
+                        # Windows: WinError 10035 - WSAEWOULDBLOCK
+                        retry_count += 1
+                        if retry_count > max_retries:
+                            self.logger(f"[ClientNetwork] Socket would block, bỏ qua gói tin.")
+                            return  # Bỏ qua, không crash connection
+                        time.sleep(0.02)
                         continue
-                    totalsent += sent
 
-        except (socket.timeout, BlockingIOError):
-            # [SỬA] Đừng ngắt kết nối khi Timeout, chỉ in log và bỏ qua gói này
-            # Video frame sau sẽ bù đắp lại
-            self.logger(f"[ClientNetwork] Socket Busy/Timeout. Bỏ qua gói tin.")
+        except (socket.timeout, OSError) as e:
+            # OSError bao gồm WinError 10035 và các lỗi socket khác
+            # Đừng ngắt kết nối khi Timeout/Busy, chỉ log và bỏ qua gói này
+            if "10035" in str(e) or "would block" in str(e).lower():
+                # Đây là lỗi socket busy, không nguy hiểm
+                pass  # Im lặng bỏ qua, video frame sau sẽ bù đắp
+            else:
+                self.logger(f"[ClientNetwork] Socket busy/timeout: {e}")
             return 
 
-        except (ssl.SSLError, ConnectionError) as e:
+        except (ssl.SSLError, ConnectionError, ConnectionResetError) as e:
+            # Chỉ ngắt kết nối khi lỗi thực sự nghiêm trọng
             self.logger(f"[ClientNetwork] Lỗi kết nối nghiêm trọng: {e}")
-            self._on_receiver_done() # Chỉ ngắt khi lỗi thực sự nghiêm trọng
+            self._on_receiver_done()
             
         except Exception as e:
+            # Lỗi khác - log nhưng không crash
             self.logger(f"[ClientNetwork] Lỗi gửi PDU: {e}")
-            # Có thể không cần ngắt kết nối ở đây tùy vào mức độ lỗi
+            import traceback
+            traceback.print_exc()
 
     def send_cursor_pdu(self, x_norm: float, y_norm: float, cursor_shape_bytes: bytes = None):
         """Gửi PDU Cursor tới Server (dùng để chuyển tiếp tới Manager)"""
