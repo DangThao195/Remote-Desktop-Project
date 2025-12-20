@@ -101,7 +101,8 @@ class Manager(QObject):
         self.session_started.emit(client_id)
 
     def _on_session_ended(self, client_id: str):
-        print(f"[Manager] Phiên làm việc với '{client_id}' đã kết thúc.")
+        print(f"[Manager] ⚠️ Phiên làm việc với '{client_id}' đã kết thúc.")
+        print(f"[Manager] Session kết thúc: current_session_client_id = {self.current_session_client_id}")
         self.current_session_client_id = None
         self.session_ended.emit()
         # Request client list để cập nhật danh sách
@@ -196,14 +197,16 @@ class Manager(QObject):
 
     def gui_disconnect_session(self):
         if not self.current_session_client_id:
-            print("Lỗi: Không ở trong phiên nào.")
+            print("[Manager] Không có phiên đang hoạt động (có thể đã tự động disconnect).")
             return
+        print(f"[Manager] Ngắt kết nối phiên với {self.current_session_client_id}...")
         self.app.disconnect_session()
 
     # --- SỬA HÀM NÀY ---
     def send_input_event(self, event: dict):
         """GUI gọi hàm này khi có sự kiện chuột/phím"""
         if not self.current_session_client_id:
+            # Session đã kết thúc, không gửi input nữa
             return 
         # Gửi sự kiện đã được format bởi GUI
         self.input_handler.send_event(event)

@@ -296,7 +296,9 @@ class ManageScreenWindow(QWidget):
                 "key": key_name
             }
             self.input_event_generated.emit(event_dict)
-            print(f"[ManageScreenWindow] Key Press: {key_name}")
+            # Chỉ log thỉnh thoảng để không spam
+            if key_name in ['enter', 'backspace', 'esc']:  # Chỉ log các phím đặc biệt
+                print(f"[ManageScreenWindow] Key Press: {key_name}")
             event.accept()
         else:
             super().keyPressEvent(event)
@@ -319,7 +321,7 @@ class ManageScreenWindow(QWidget):
                 "key": key_name
             }
             self.input_event_generated.emit(event_dict)
-            print(f"[ManageScreenWindow] Key Release: {key_name}")
+            # Không log key release để giảm spam
             event.accept()
         else:
             super().keyReleaseEvent(event)
@@ -385,19 +387,33 @@ class ManageScreenWindow(QWidget):
 
     def set_session_ended(self):
         """Called when session ends - VỀ TRẠNG THÁI CONNECTING, KHÔNG ĐÓNG WINDOW"""
-        print(f"[ManageScreenWindow] Session ended - trở về Connecting...")
+        print(f"[ManageScreenWindow] ⚠️ Session ended - trở về Connecting...")
+        print(f"[ManageScreenWindow] Trước khi ended: current_client_id = {self.current_client_id}")
         self.screen_label.clear()
-        self.screen_label.setText(f"Connecting to {self.client_id}...")
+        
+        # Hiển thị thông báo và nút Reconnect
+        message = f"""<div style='text-align: center; padding: 50px;'>
+            <h2 style='color: #FFA500;'>⚠️ Session Ended</h2>
+            <p style='color: {TEXT_LIGHT};'>Connection to {self.client_id} has been closed.</p>
+            <p style='color: {SUBTEXT}; font-size: 10pt;'>Click Disconnect to close this window,<br/>or wait for automatic reconnection.</p>
+        </div>"""
+        self.screen_label.setText(message)
+        
         self.current_client_id = None
         self.cursor_label.hide()
         self.client_pixmap = QPixmap()
+        print(f"[ManageScreenWindow] Sau khi ended: current_client_id = {self.current_client_id}")
         # KHÔNG đóng window!
         # self.close()
     
     def _on_disconnect_click(self):
         """Handle disconnect button click"""
         print(f"[ManageScreenWindow] Disconnect button clicked")
-        self.disconnect_requested.emit()
+        # Chỉ emit signal nếu đang có session
+        if self.current_client_id:
+            self.disconnect_requested.emit()
+        else:
+            print(f"[ManageScreenWindow] Session đã kết thúc rồi, không cần disconnect")
     
     def closeEvent(self, event):
         """Handle window close event (X button)"""
