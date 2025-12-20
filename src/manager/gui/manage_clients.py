@@ -27,6 +27,19 @@ class ManageClientsWindow(QWidget):
         self.setMinimumSize(1000, 600)
         self.setStyleSheet(f"background-color: {DARK_BG}; color: {TEXT_LIGHT};")
         self.init_ui()
+        
+        # Kết nối signals từ manager để nhận keylog và security alerts LIÊN TỤC
+        self._connect_manager_signals()
+    
+    def _connect_manager_signals(self):
+        """Kết nối signals từ manager logic để nhận keylog và security alerts"""
+        manager = QApplication.instance().manager_logic
+        if manager:
+            # Nhận keylog data liên tục
+            manager.input_pdu_received.connect(self.display_keylog)
+            # Nhận security alerts liên tục
+            manager.security_alert_received.connect(self.display_security_alert)
+            print("[ManageClientsWindow] Đã kết nối signals để nhận keylog và security alerts liên tục")
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -137,7 +150,7 @@ class ManageClientsWindow(QWidget):
         right_layout.addWidget(self.server_ip_label, alignment=Qt.AlignmentFlag.AlignLeft)
 
         btn_layout = QHBoxLayout()
-        actions = ["Keylogger", "Screen", "Control", "File Transfer", "All History"]
+        actions = ["Keylogger", "Security Alerts", "Screen", "Control", "File Transfer"]
         self.buttons = {}
         for act in actions:
             btn = QPushButton(act)
@@ -161,6 +174,7 @@ class ManageClientsWindow(QWidget):
         # Connect signals
         self.buttons["Screen"].clicked.connect(self.view_screen)
         self.buttons["Keylogger"].clicked.connect(self.view_keylogger)
+        self.buttons["Security Alerts"].clicked.connect(self.view_security_alerts)
 
         self.action_area = QTextEdit()
         self.action_area.setPlaceholderText("Action output will appear here...")
@@ -414,27 +428,52 @@ class ManageClientsWindow(QWidget):
         self.action_area.append(f"Error: {error_msg}")
     
     def view_keylogger(self):
-        """Bật hiển thị keylogger logs"""
+        """Bật hiển thị keylogger logs - chỉ keystroke, không bao gồm security alerts"""
         if not self.selected_client_id:
             self.action_area.append("⚠️ Vui lòng chọn client trước!")
             return
         
         self.action_area.clear()
-        self.action_area.setHtml(f"""
+        keyboard_icon = "\u2328\ufe0f"  # Emoji ⌨️
+        search_icon = "\U0001F50D"  # Emoji 🔍
+        html_content = f"""
             <div style='border-bottom: 2px solid {SPOTIFY_GREEN}; padding-bottom: 10px; margin-bottom: 10px;'>
-                <h2 style='color: {SPOTIFY_GREEN}; margin: 5px 0;'>🔐 KEYLOGGER - LOG BÁO CÁO VI PHẠM</h2>
+                <h2 style='color: {SPOTIFY_GREEN}; margin: 5px 0;'>{keyboard_icon} KEYLOGGER - GIÁM SÁT GÕ PHÍM</h2>
                 <p style='color: {SUBTEXT}; margin: 5px 0;'>Client: <b style='color: {TEXT_LIGHT};'>{self.selected_client_id}</b></p>
                 <p style='color: {SUBTEXT}; margin: 5px 0;'>Trạng thái: <b style='color: {SPOTIFY_GREEN};'>Đang theo dõi...</b></p>
             </div>
-            <p style='color: {SUBTEXT}; font-style: italic;'>Nhật ký keylog sẽ hiển thị bên dưới:</p>
-        """)
+            <p style='color: {SUBTEXT}; font-style: italic;'>{search_icon} Nhật ký keylog sẽ hiển thị bên dưới:</p>
+        """
+        self.action_area.setHtml(html_content)
+    
+    def view_security_alerts(self):
+        """Hiển thị thông báo vi phạm bảo mật từ client"""
+        if not self.selected_client_id:
+            self.action_area.append("⚠️ Vui lòng chọn client trước!")
+            return
+        
+        self.action_area.clear()
+        alert_icon = "\U0001F6A8"  # Emoji 🚨
+        html_content = f"""
+            <div style='border-bottom: 2px solid #FF4444; padding-bottom: 10px; margin-bottom: 10px;'>
+                <h2 style='color: #FF4444; margin: 5px 0;'>{alert_icon} THÔNG BÁO VI PHẠM BẢO MẬT</h2>
+                <p style='color: {SUBTEXT}; margin: 5px 0;'>Client: <b style='color: {TEXT_LIGHT};'>{self.selected_client_id}</b></p>
+                <p style='color: {SUBTEXT}; margin: 5px 0;'>Trạng thái: <b style='color: #FF4444;'>Đang giám sát...</b></p>
+            </div>
+            <p style='color: {SUBTEXT}; font-style: italic;'>Cảnh báo vi phạm sẽ hiển thị bên dưới:</p>
+        """
+        self.action_area.setHtml(html_content)
         
     def display_keylog(self, pdu: dict):
-        """Hiển thị keylog data trong action_area"""
+        """Hiển thị keylog data trong action_area (chỉ keystroke, không bao gồm security alerts)"""
         try:
             # INPUT PDU có trường 'input' (dict/object) hoặc 'message' (string)
             input_data = pdu.get('input')
             message = pdu.get('message', '')
+            
+            # Nếu là security alert thì bỏ qua, không hiển thị trong keylogger
+            if isinstance(message, str) and message.startswith('security_alert:'):
+                return  # Không hiển thị security alert trong keylogger
             
             from datetime import datetime
             timestamp = datetime.now().strftime("%H:%M:%S")
@@ -465,8 +504,8 @@ class ManageClientsWindow(QWidget):
                 </div>
                 """
                 self.action_area.append(log_html)
-            elif message:
-                # Nếu là message string
+            elif message and not message.startswith('security_alert:'):
+                # Nếu là message string và không phải security alert
                 log_html = f"""
                 <div style='padding: 5px; margin: 3px 0;'>
                     <span style='color: {SUBTEXT};'>[{timestamp}]</span>
@@ -474,9 +513,6 @@ class ManageClientsWindow(QWidget):
                 </div>
                 """
                 self.action_area.append(log_html)
-            else:
-                # Fallback
-                self.action_area.append(f"<div style='color: {SUBTEXT};'>[{timestamp}] {str(pdu)}</div>")
             
             # Auto scroll to bottom
             scrollbar = self.action_area.verticalScrollBar()

