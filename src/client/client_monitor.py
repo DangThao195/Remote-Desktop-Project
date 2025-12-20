@@ -14,14 +14,14 @@ class ClientMonitor(threading.Thread):
         while self.running:
             try:
                 # --- CÁCH 1: KIỂM TRA TIÊU ĐỀ CỬA SỔ (Nhẹ, Nhanh) ---
-                active_window = gw.getActiveWindow()
-                if active_window:
-                    title = active_window.title.lower()
-                    bad_keywords = ["bet88", "nhà cái", "phimmoi", "xoilac"]
+                # active_window = gw.getActiveWindow()
+                # if active_window:
+                #     title = active_window.title.lower()
+                #     bad_keywords = ["bet88", "nhà cái", "phimmoi", "xoilac"]
                     
-                    for kw in bad_keywords:
-                        if kw in title:
-                            self.trigger_alert("Web Cấm", f"Đang truy cập: {title}")
+                #     for kw in bad_keywords:
+                #         if kw in title:
+                #             self.trigger_alert("Web Cấm", f"Đang truy cập: {title}")
                             # Có thể thêm lệnh đóng cửa sổ: active_window.close()
                 
                 # --- CÁCH 2: DÙNG AI (Nặng hơn) ---

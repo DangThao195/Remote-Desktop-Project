@@ -10,7 +10,7 @@ class ClientCursorTracker(threading.Thread):
     Theo dõi vị trí con trỏ chuột và gửi PDU Cursor khi có thay đổi.
     """
     
-    def __init__(self, network, fps: int = 15, logger=None):
+    def __init__(self, network, fps: int = 5, logger=None):  # Giảm từ 15 xuống 5 FPS
         super().__init__(daemon=True, name="CursorTracker")
         self.network = network
         self.fps = fps
@@ -44,14 +44,14 @@ class ClientCursorTracker(threading.Thread):
                 
                 new_pos = (x_norm, y_norm)
                 
-                # 3. Kiểm tra thay đổi (ví dụ: thay đổi > 0.1% màn hình)
-                if abs(new_pos[0] - self.last_norm_pos[0]) > 0.005 or \
-                   abs(new_pos[1] - self.last_norm_pos[1]) > 0.005: 
+                # 3. Kiểm tra thay đổi (ví dụ: thay đổi > 1% màn hình)
+                if abs(new_pos[0] - self.last_norm_pos[0]) > 0.01 or \
+                   abs(new_pos[1] - self.last_norm_pos[1]) > 0.01: 
 
                     # 4. Gửi PDU Cursor (shape_bytes = None)
                     self.network.send_cursor_pdu(x_norm, y_norm, cursor_shape_bytes=None)
                     self.last_norm_pos = new_pos
-                    print(f"[CursorTracker] Gửi vị trí: {x_norm:.2f}, {y_norm:.2f}")
+                    # print(f"[CursorTracker] Gửi vị trí: {x_norm:.2f}, {y_norm:.2f}")  # Bỏ log để giảm spam
 
             except Exception as e:
                 if self.running:

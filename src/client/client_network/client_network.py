@@ -187,29 +187,55 @@ class ClientNetwork:
     # --- Public API cho ClientSender và Client ---
 
     def send_mcs_pdu(self, channel_id: int, pdu_bytes: bytes):
-        if not self.running or not self.client: 
+        # Kiểm tra running flag và socket validity trước khi send
+        if not self.running:
             return
+        
+        with self.lock:
+            # Double-check socket còn hợp lệ trong lock để tránh race condition
+            if not self.client:
+                return
+            
+            # Kiểm tra socket có fileno hợp lệ không (tránh WinError 10038)
+            try:
+                self.client.fileno()  # Raise exception nếu socket đã closed
+            except (OSError, AttributeError):
+                # Socket đã bị đóng hoặc không hợp lệ
+                return
+        
         try:
             mcs_frame = MCSLite.build(channel_id, pdu_bytes)
             tpkt_packet = TPKTLayer.pack(mcs_frame)
             
             with self.lock:
+                # Check lại lần nữa vì có thể bị disconnect trong lúc build packet
+                if not self.client or not self.running:
+                    return
+                
                 totalsent = 0
                 data_to_send = tpkt_packet
                 retry_count = 0
                 max_retries = 3
                 
-                while totalsent < len(data_to_send):
+                while totalsent < len(data_to_send) and self.running:
+                    # Verify socket vẫn còn valid trong mỗi vòng lặp
+                    try:
+                        if not self.client:
+                            return
+                        self.client.fileno()  # Check socket valid
+                    except (OSError, AttributeError):
+                        return
+                    
                     try:
                         sent = self.client.send(data_to_send[totalsent:])
                         if sent is None:
-                            raise ConnectionError("Socket broken")
+                            return  # Socket lỗi, bỏ qua
                         if sent == 0:
                             # Socket đang bận/đầy
                             retry_count += 1
                             if retry_count > max_retries:
-                                self.logger(f"[ClientNetwork] Socket busy quá lâu, bỏ qua gói tin.")
-                                return  # Bỏ qua gói này, không crash
+                                # Bỏ qua gói này, không log (quá nhiều log)
+                                return
                             time.sleep(0.02)  # Chờ lâu hơn
                             continue
                         totalsent += sent
@@ -219,8 +245,8 @@ class ClientNetwork:
                         # Windows: WinError 10035 - WSAEWOULDBLOCK
                         retry_count += 1
                         if retry_count > max_retries:
-                            self.logger(f"[ClientNetwork] Socket would block, bỏ qua gói tin.")
-                            return  # Bỏ qua, không crash connection
+                            # Socket busy quá lâu, bỏ qua gói này
+                            return
                         time.sleep(0.02)
                         continue
 
