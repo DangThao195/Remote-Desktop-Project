@@ -217,7 +217,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "192.168.2.31"
+    HOST = "192.168.5.159"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 

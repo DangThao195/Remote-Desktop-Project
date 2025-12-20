@@ -258,10 +258,74 @@ class ManageScreenWindow(QWidget):
         return True
 
     def handle_key_event(self, event: QKeyEvent):
-        """Handle keyboard events"""
+        """Handle keyboard events from eventFilter (legacy, now using keyPressEvent/keyReleaseEvent)"""
         if not self.current_client_id:
             return False
+        
+        # Tránh auto-repeat
+        if event.isAutoRepeat():
+            return True
+        
+        key_name = self._get_key_name(event)
+        if key_name:
+            event_type = "key_press" if event.type() == QEvent.Type.KeyPress else "key_release"
+            event_dict = {
+                "type": event_type,
+                "key": key_name
+            }
+            self.input_event_generated.emit(event_dict)
+            return True
+        
+        return False
 
+    def keyPressEvent(self, event: QKeyEvent):
+        """Handle key press events at window level"""
+        if not self.current_client_id:
+            super().keyPressEvent(event)
+            return
+        
+        # Tránh gửi lặp lại sự kiện auto-repeat
+        if event.isAutoRepeat():
+            event.accept()
+            return
+        
+        key_name = self._get_key_name(event)
+        if key_name:
+            event_dict = {
+                "type": "key_press",
+                "key": key_name
+            }
+            self.input_event_generated.emit(event_dict)
+            print(f"[ManageScreenWindow] Key Press: {key_name}")
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+    
+    def keyReleaseEvent(self, event: QKeyEvent):
+        """Handle key release events at window level"""
+        if not self.current_client_id:
+            super().keyReleaseEvent(event)
+            return
+        
+        # Tránh gửi lặp lại sự kiện auto-repeat
+        if event.isAutoRepeat():
+            event.accept()
+            return
+        
+        key_name = self._get_key_name(event)
+        if key_name:
+            event_dict = {
+                "type": "key_release",
+                "key": key_name
+            }
+            self.input_event_generated.emit(event_dict)
+            print(f"[ManageScreenWindow] Key Release: {key_name}")
+            event.accept()
+        else:
+            super().keyReleaseEvent(event)
+    
+    def _get_key_name(self, event: QKeyEvent):
+        """Get standardized key name from QKeyEvent"""
         key_map = {
             Qt.Key.Key_Backspace: 'backspace',
             Qt.Key.Key_Tab: 'tab',
@@ -275,36 +339,49 @@ class ManageScreenWindow(QWidget):
             Qt.Key.Key_Delete: 'delete',
             Qt.Key.Key_Home: 'home',
             Qt.Key.Key_End: 'end',
+            Qt.Key.Key_PageUp: 'pageup',
+            Qt.Key.Key_PageDown: 'pagedown',
             Qt.Key.Key_Left: 'left',
             Qt.Key.Key_Up: 'up',
             Qt.Key.Key_Right: 'right',
             Qt.Key.Key_Down: 'down',
+            Qt.Key.Key_Insert: 'insert',
+            Qt.Key.Key_CapsLock: 'capslock',
+            Qt.Key.Key_NumLock: 'numlock',
+            Qt.Key.Key_ScrollLock: 'scrolllock',
+            Qt.Key.Key_Print: 'printscreen',
+            Qt.Key.Key_Pause: 'pause',
+            Qt.Key.Key_Meta: 'win',
+            Qt.Key.Key_Super_L: 'win',
+            Qt.Key.Key_Super_R: 'win',
         }
-
+        
         # Add F1-F12
         for i in range(1, 13):
             key_map[getattr(Qt.Key, f'Key_F{i}')] = f'f{i}'
-
+        
         key = event.key()
-        key_name = key_map.get(key, chr(key).lower() if key < 256 else "")
-
-        if key_name:
-            # Định dạng phù hợp với ClientInputHandler: key_press/key_release
-            event_type = "key_press" if event.type() == QEvent.Type.KeyPress else "key_release"
-            event_dict = {
-                "type": event_type,
-                "key": key_name
-            }
-            self.input_event_generated.emit(event_dict)
-            return True
-
-        return False
-
+        
+        # Check if key is in map
+        if key in key_map:
+            return key_map[key]
+        
+        # For regular characters
+        text = event.text()
+        if text and text.isprintable() and len(text) == 1:
+            return text.lower()
+        
+        return None
+    
     def set_session_started(self, client_id: str):
         """Called when session starts"""
         print(f"[ManageScreenWindow] Session started: {client_id}")
         self.screen_label.setText(f"Connected to {client_id}")
         self.current_client_id = client_id
+        
+        # Set focus to window để bắt keyboard events
+        self.setFocus()
+        self.activateWindow()
 
     def set_session_ended(self):
         """Called when session ends - VỀ TRẠNG THÁI CONNECTING, KHÔNG ĐÓNG WINDOW"""

@@ -73,12 +73,27 @@ class ClientInputHandler:
                 pyautogui.scroll(ev.get("delta", 0))
             
             elif t == "key_press":
-                key = ev["key"]
-                pyautogui.keyDown(key)
+                key = ev.get("key", "")
+                if key:
+                    print(f"[ClientInputHandler] 🎹 Key Press: {key}")
+                    try:
+                        pyautogui.keyDown(key, _pause=False)
+                    except Exception as key_err:
+                        # Nếu pyautogui không nhận diện key, thử press thay vì keyDown
+                        try:
+                            pyautogui.press(key, _pause=False)
+                        except:
+                            self.logger(f"[InputHandler] Không thể nhấn phím: {key} - {key_err}")
             
             elif t == "key_release":
-                key = ev["key"]
-                pyautogui.keyUp(key)
+                key = ev.get("key", "")
+                if key:
+                    print(f"[ClientInputHandler] 🎹 Key Release: {key}")
+                    try:
+                        pyautogui.keyUp(key, _pause=False)
+                    except Exception as key_err:
+                        # Một số phím không cần release (như press)
+                        self.logger(f"[InputHandler] Không thể nhả phím: {key} - {key_err}")
                 
         except Exception as e:
             self.logger(f"[InputHandler] Lỗi thực thi: {e}")
