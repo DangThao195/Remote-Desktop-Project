@@ -11,7 +11,7 @@ sys.path.insert(0, os.getcwd())
 def run_auth_server():
     """Chạy Auth Server (port 5001)"""
     try:
-        from src.server.main import start_server
+        from src.server.core.auth_server import start_server
         print("[Auth Server] Dang khoi dong tren port 5001...")
         start_server()
     except Exception as e:

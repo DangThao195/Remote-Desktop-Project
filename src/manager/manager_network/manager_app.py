@@ -40,6 +40,7 @@ class ManagerApp:
         self.on_file_pdu = None
         self.on_control_pdu = None
         self.on_cursor_pdu = None
+        self.on_input_pdu = None
 
     def start(self, cafile: str) -> bool:
         if not self.client.connect(cafile):
@@ -125,6 +126,10 @@ class ManagerApp:
             if self.on_cursor_pdu:
                 self.on_cursor_pdu(pdu)
 
+        elif ptype == "input":
+            if self.on_input_pdu:
+                self.on_input_pdu(pdu)
+                
         elif ptype.startswith("file_"):
             if self.on_file_pdu:
                 self.on_file_pdu(pdu)

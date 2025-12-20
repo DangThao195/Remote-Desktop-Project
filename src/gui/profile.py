@@ -58,27 +58,27 @@ class ProfileWindow(QWidget):
             }
         """)
 
-        # Nếu self.user là dict thì lấy key, nếu không thì dùng chuỗi
-        username = self.user.Username
-        fullname = self.user.FullName
-        email = self.user.Email
-        created_at = self.user.CreatedAt
-        last_login = self.user.LastLogin
-        role = self.user.Role
+        # Truy cập user data từ dictionary
+        username = self.user.get('Username', '')
+        fullname = self.user.get('FullName', '')
+        email = self.user.get('Email', '')
+        created_at = self.user.get('CreatedAt')
+        last_login = self.user.get('LastLogin')
+        role = self.user.get('Role', '')
 
         self.username = create_input(username)
         self.full_name = create_input(fullname)
         self.email = create_input(email)
-        self.created_at = create_input(created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "")
-        self.last_login = create_input(last_login.strftime("%Y-%m-%d %H:%M:%S") if last_login else "")
+        self.created_at = create_input(created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "N/A")
+        self.last_login = create_input(last_login.strftime("%Y-%m-%d %H:%M:%S") if last_login else "N/A")
         self.role = create_input(role)
 
-        self.username.setText(self.user.Username)
-        self.full_name.setText(self.user.FullName)
-        self.email.setText(self.user.Email)
-        self.created_at.setText(self.user.CreatedAt.strftime("%Y-%m-%d %H:%M:%S") if self.user.CreatedAt else "")
-        self.last_login.setText(self.user.LastLogin.strftime("%Y-%m-%d %H:%M:%S") if self.user.LastLogin else "")
-        self.role.setText(self.user.Role)
+        self.username.setText(username)
+        self.full_name.setText(fullname)
+        self.email.setText(email)
+        self.created_at.setText(created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "N/A")
+        self.last_login.setText(last_login.strftime("%Y-%m-%d %H:%M:%S") if last_login else "N/A")
+        self.role.setText(role)
 
         pass_form = QFormLayout()
         pass_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
@@ -150,11 +150,11 @@ class ProfileWindow(QWidget):
     def toggle_edit(self):
         passed_old = self.old_pass.text().strip()
         passed_new = self.new_pass.text().strip()
-        fullname_new = self.full_name.text().strip() if self.full_name.text().strip() else self.user.FullName
-        email_new = self.email.text().strip() if self.email.text().strip() else self.user.Email
+        fullname_new = self.full_name.text().strip() if self.full_name.text().strip() else self.user.get('FullName', '')
+        email_new = self.email.text().strip() if self.email.text().strip() else self.user.get('Email', '')
 
         print("aaaaa", passed_old, passed_new, fullname_new, email_new)
-        editable = False if not passed_old else QApplication.instance().conn.client_checkpassword(self.user.UserID, passed_old)
+        editable = False if not passed_old else QApplication.instance().conn.client_checkpassword(self.user.get('UserID'), passed_old)
         
         if not editable:
             QMessageBox.warning(None, "Error", "Password is incorrect!")
@@ -165,14 +165,14 @@ class ProfileWindow(QWidget):
             if self.new_pass.text().strip() == self.old_pass.text().strip():
                 QMessageBox.warning(None, "Error", "New password must be different from old password!")
                 return
-            QApplication.instance().conn.client_edit(self.user.UserID, fullname_new, email_new, passed_new)
+            QApplication.instance().conn.client_edit(self.user.get('UserID'), fullname_new, email_new, passed_new)
         else:
-            QApplication.instance().conn.client_edit(self.user.UserID, fullname_new, email_new)
+            QApplication.instance().conn.client_edit(self.user.get('UserID'), fullname_new, email_new)
         QMessageBox.information(None, "Success", "Profile updated successfully!")
         self.refresh_user_data()
         
     def go_back(self):
-        if (self.user.Role == "user"):
+        if (self.user.get('Role') == "user"):
             from src.client.client import ClientWindow
             self.profile_window = ClientWindow(self.user, self.token)
             self.profile_window.showMaximized()
@@ -183,15 +183,26 @@ class ProfileWindow(QWidget):
         data = QApplication.instance().conn.client_profile(self.token)
         new_user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
         
-        self.user = new_user  # cập nhật lại dữ liệu user
+        # Chuyển User object thành dictionary
+        self.user = {
+            'UserID': new_user.UserID,
+            'Username': new_user.Username,
+            'FullName': new_user.FullName,
+            'Email': new_user.Email,
+            'CreatedAt': new_user.CreatedAt,
+            'LastLogin': new_user.LastLogin,
+            'Role': new_user.Role
+        }
 
         # Cập nhật lại giao diện
-        self.username.setText(self.user.Username)
-        self.full_name.setText(self.user.FullName)
-        self.email.setText(self.user.Email)
-        self.created_at.setText(self.user.CreatedAt.strftime("%Y-%m-%d %H:%M:%S") if self.user.CreatedAt else "")
-        self.last_login.setText(self.user.LastLogin.strftime("%Y-%m-%d %H:%M:%S") if self.user.LastLogin else "")
-        self.role.setText(self.user.Role)
+        self.username.setText(self.user.get('Username', ''))
+        self.full_name.setText(self.user.get('FullName', ''))
+        self.email.setText(self.user.get('Email', ''))
+        created_at = self.user.get('CreatedAt')
+        self.created_at.setText(created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "N/A")
+        last_login = self.user.get('LastLogin')
+        self.last_login.setText(last_login.strftime("%Y-%m-%d %H:%M:%S") if last_login else "N/A")
+        self.role.setText(self.user.get('Role', ''))
 
         # Xóa mật khẩu cũ
         self.old_pass.clear()
