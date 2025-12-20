@@ -173,7 +173,7 @@ class ProfileWindow(QWidget):
         
     def go_back(self):
         if (self.user.Role == "user"):
-            from src.gui.client_gui import ClientWindow
+            from src.client.client import ClientWindow
             self.profile_window = ClientWindow(self.user, self.token)
             self.profile_window.showMaximized()
             self.close()

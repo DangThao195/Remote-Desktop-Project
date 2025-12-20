@@ -1,3 +1,5 @@
+# src/gui/add_client.py
+
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton,
@@ -97,7 +99,7 @@ class AddClientWindow(QWidget):
         self.back_btn.clicked.connect(self.open_manage_clients)
 
     def open_manage_clients(self):
-        from src.gui.manage_clients import ManageClientsWindow 
+        from src.manager.gui.manage_clients import ManageClientsWindow 
         self.manage_clients_window = ManageClientsWindow()
         self.manage_clients_window.show()
         self.close()

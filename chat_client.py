@@ -2,12 +2,11 @@ import socket
 import json
 import sys
 
-
 from PyQt6.QtWidgets import QApplication
-
 from src.gui.signin import SignInWindow
 
 def on_app_exit():
+    """Xử lý khi ứng dụng thoát"""
     print("⏳ Ứng dụng chuẩn bị thoát, cập nhật LastLogin...")
     if QApplication.instance().current_user is None:
         return

@@ -1,0 +1,1 @@
+# src/manager/gui/__init__.py

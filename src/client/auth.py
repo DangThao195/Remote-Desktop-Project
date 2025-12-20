@@ -1,14 +1,27 @@
 import socket
 import struct
 import json
+import ssl
+import sys
+import os
 from datetime import datetime
+
+# Lấy đường dẫn tuyệt đối của file hiện tại
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '..', '..'))
+
+# Thêm đường dẫn gốc vào sys.path để Python nhìn thấy module 'config'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from config import server_config
 
 class ClientConnection:
     def __init__(self):
         self.host = server_config.SERVER_IP
-        self.port = server_config.SERVER_HOST
+        self.port = server_config.AUTH_HOST
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
         self.sock.connect((self.host, self.port))
         print(f"[+] Kết nối tới server {self.host}:{self.port}")
 

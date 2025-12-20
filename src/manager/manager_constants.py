@@ -26,7 +26,8 @@ ALL_CHANNELS = (
 )
 
 # --- Lệnh Gửi đi (Manager -> Server) ---
-CMD_REGISTER = "register:manager"
+CMD_REGISTER = "register:"
+CMD_LOGIN = "login:"
 CMD_LIST_CLIENTS = "list_clients"
 CMD_CONNECT_CLIENT = "connect:"  # Ví dụ: "connect:client_pc_1"
 CMD_DISCONNECT = "disconnect"

@@ -5,20 +5,23 @@ import json
 from queue import Queue, Empty
 from .manager_client import ManagerClient
 from .manager_receiver import ManagerReceiver
-from common_network.pdu_builder import PDUBuilder
-from common_network.mcs_layer import MCSLite
-from common_network.tpkt_layer import TPKTLayer
-from manager.manager_constants import (
+from src.common.network.pdu_builder import PDUBuilder
+from src.common.network.mcs_layer import MCSLite
+from src.common.network.tpkt_layer import TPKTLayer
+from src.manager.manager_constants import (
     CHANNEL_CONTROL, CHANNEL_INPUT,
-    CMD_REGISTER, CMD_LIST_CLIENTS, CMD_CONNECT_CLIENT, CMD_DISCONNECT,
+    CMD_REGISTER, CMD_LOGIN, CMD_LIST_CLIENTS, CMD_CONNECT_CLIENT, CMD_DISCONNECT,
     CMD_CLIENT_LIST_UPDATE, CMD_SESSION_STARTED, CMD_SESSION_ENDED, CMD_ERROR
 )
 
 class ManagerApp:
-    def __init__(self, host: str, port: int, manager_id: str = "manager1"):
+    def __init__(self, host: str, port: int, manager_id: str = "manager1", username: str = None, password: str = None):
         self.client = ManagerClient(host, port, manager_id)
         self.receiver = None
         self.running = False
+        
+        self.username = username
+        self.password = password
         
         self.pdu_queue = Queue()
         self.pdu_loop_thread = None
@@ -112,8 +115,11 @@ class ManagerApp:
                 self.on_control_pdu(pdu)
 
         elif ptype in ("full", "rect"):
+            print(f"[ManagerApp] Xử lý VIDEO PDU: {ptype}")
             if self.on_video_pdu:
                 self.on_video_pdu(pdu)
+            else:
+                print(f"[ManagerApp] ⚠️ CẢNH BÁO: on_video_pdu callback CHƯA được đăng ký!")
 
         elif ptype == "cursor": 
             if self.on_cursor_pdu:
@@ -147,7 +153,10 @@ class ManagerApp:
 
     def register(self):
         print("[ManagerApp] Đăng ký với server...")
-        self._send_control_pdu(CMD_REGISTER)
+        if self.username and self.password:
+            self._send_control_pdu(f"{CMD_LOGIN}{self.username}:{self.password}:manager")
+        else:
+            self._send_control_pdu(f"{CMD_REGISTER}manager")
 
     def request_client_list(self):
         self._send_control_pdu(CMD_LIST_CLIENTS)

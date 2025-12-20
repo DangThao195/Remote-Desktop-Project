@@ -8,14 +8,14 @@ import json
 import zlib
 from typing import Optional, Dict, Any
 
-from common_network.mcs_layer import MCSLite
-from common_network.pdu_builder import PDUBuilder
-from common_network.durable_queue import DurableQueue
-from common_network.file_utils import stream_file_in_chunks, crc32_bytes
-from common_network.pdu_parser import PDUParser 
-from client.client_constants import CHANNEL_VIDEO, CHANNEL_FILE
+from src.common.network.mcs_layer import MCSLite
+from src.common.network.pdu_builder import PDUBuilder
+from src.common.network.durable_queue import DurableQueue
+from src.common.network.file_utils import stream_file_in_chunks, crc32_bytes
+from src.common.network.pdu_parser import PDUParser 
+from src.client.client_constants import CHANNEL_VIDEO, CHANNEL_FILE
 # [QUAN TRỌNG] Import các hằng số cần thiết
-from common_network.constants import SHARE_HDR_SIZE, FRAGMENT_HDR_SIZE, MAX_TPKT_LENGTH
+from src.common.network.constants import SHARE_HDR_SIZE, FRAGMENT_HDR_SIZE, MAX_TPKT_LENGTH
 
 class ClientSender:
     def __init__(self, 

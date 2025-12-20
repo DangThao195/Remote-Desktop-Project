@@ -4,10 +4,10 @@ import threading
 import struct
 import ssl
 from collections import defaultdict
-from common_network.mcs_layer import MCSLite
-from common_network.pdu_parser import PDUParser
-from common_network.tpkt_layer import TPKTLayer
-from common_network.constants import (
+from src.common.network.mcs_layer import MCSLite
+from src.common.network.pdu_parser import PDUParser
+from src.common.network.tpkt_layer import TPKTLayer
+from src.common.network.constants import (
     SHARE_CTRL_HDR_FMT, SHARE_HDR_SIZE,
     FRAGMENT_FLAG, FRAGMENT_HDR_FMT, FRAGMENT_HDR_SIZE,
     PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT,
@@ -15,7 +15,7 @@ from common_network.constants import (
     PDU_TYPE_FILE_ACK, PDU_TYPE_FILE_NAK
 )
 # Thay đổi import
-from client.client_constants import ALL_CHANNELS
+from src.client.client_constants import ALL_CHANNELS
 
 # Đổi tên lớp
 class ClientReceiver(threading.Thread):

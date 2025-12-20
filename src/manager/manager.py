@@ -2,17 +2,25 @@
 
 import sys
 import time
+import os
 from PIL import Image
 import io
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from manager.manager_network.manager_app import ManagerApp
-from manager.manager_gui import ManagerWindow 
-from manager.manager_input import ManagerInputHandler
-from manager.manager_viewer import ManagerViewer
-from manager.manager_constants import CA_FILE
-import os
+# Lấy đường dẫn tuyệt đối của file manager.py hiện tại
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '..', '..'))
+
+# Thêm đường dẫn gốc vào sys.path để Python nhìn thấy module 'src'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from src.manager.manager_network.manager_app import ManagerApp
+from src.manager.gui.manager_gui import ManagerWindow 
+from src.manager.manager_input import ManagerInputHandler
+from src.manager.manager_viewer import ManagerViewer
+from src.manager.manager_constants import CA_FILE
 
 class Manager(QObject): 
     
@@ -24,10 +32,10 @@ class Manager(QObject):
     disconnected_from_server = pyqtSignal()
     cursor_pdu_received = pyqtSignal(object)
 
-    def __init__(self, host: str, port: int, manager_id: str = "manager1"):
+    def __init__(self, host: str, port: int, manager_id: str = "manager1", username: str = None, password: str = None):
         super().__init__()
         
-        self.app = ManagerApp(host, port, manager_id)
+        self.app = ManagerApp(host, port, manager_id, username, password)
         self.input_handler = ManagerInputHandler(self.app)
         self.viewer = ManagerViewer()
         
@@ -91,9 +99,9 @@ class Manager(QObject):
 
     def _on_session_ended(self, client_id: str):
         print(f"[Manager] Phiên làm việc với '{client_id}' đã kết thúc.")
-        if self.current_session_client_id == client_id:
-            self.current_session_client_id = None
+        self.current_session_client_id = None
         self.session_ended.emit()
+        # Request client list để cập nhật danh sách
         self.app.request_client_list()
 
     def _on_error(self, error_msg: str):
@@ -106,10 +114,19 @@ class Manager(QObject):
             print(f"[Manager] CẢNH BÁO: Bỏ qua video PDU vì chưa có Session ID! Type: {pdu.get('type')}")
             return
         
-        updated_img = self.viewer.process_video_pdu(self.current_session_client_id, pdu)
-        
-        if updated_img:
-            self.video_pdu_received.emit(updated_img)
+        print(f"[Manager] Đang xử lý video PDU: {pdu.get('type')} cho client: {self.current_session_client_id}")
+        try:
+            updated_img = self.viewer.process_video_pdu(self.current_session_client_id, pdu)
+            
+            if updated_img:
+                print(f"[Manager] ✅ Đã xử lý và emit video frame, size: {updated_img.size}")
+                self.video_pdu_received.emit(updated_img)
+            else:
+                print(f"[Manager] ⚠️ process_video_pdu trả về None")
+        except Exception as e:
+            print(f"[Manager] LỖI khi xử lý video PDU: {e}")
+            import traceback
+            traceback.print_exc()
         
     def _on_file_pdu(self, pdu: dict):
         ptype = pdu.get("type")
@@ -128,19 +145,32 @@ class Manager(QObject):
         self.cursor_pdu_received.emit(pdu) # Gửi thẳng dict PDU lên GUI/Viewer
 
     def gui_connect_to_client(self, client_id: str):
-        if self.current_session_client_id:
-            print(f"Lỗi: Đang trong phiên.")
-            return
-        if client_id not in self.client_list:
-            print(f"Lỗi: Client {client_id} không có sẵn.")
+        print(f"[Manager] gui_connect_to_client được gọi với client_id: {client_id}")
+        
+        # Nếu đã có session với client này, không làm gì
+        if self.current_session_client_id == client_id:
+            print(f"[Manager] Đã có session với {client_id} rồi, không cần connect lại")
             return
         
-        # [SỬA LỖI RACE CONDITION TẠI ĐÂY]
-        # Gán ID ngay lập tức, không chờ server phản hồi "session_started".
-        # Điều này đảm bảo nếu Video Frame tới trước Control Packet, nó vẫn được xử lý.
+        # Nếu đang có session với client KHÁC, disconnect trước
+        if self.current_session_client_id and self.current_session_client_id != client_id:
+            print(f"[Manager] Đang trong phiên với {self.current_session_client_id}. Disconnect trước.")
+            self.gui_disconnect_session()
+            import time
+            time.sleep(0.3)  # Chờ disconnect hoàn tất
+        
+        # Kiểm tra client_id có trong danh sách không (không block nếu không có)
+        client_ids = [c['id'] for c in self.client_list]
+        print(f"[Manager] Danh sách client IDs hiện tại: {client_ids}")
+        
+        if client_id not in client_ids:
+            print(f"[Manager] Client {client_id} chưa trong danh sách. Vẫn thử kết nối...")
+        
+        # Gán ID ngay lập tức để nhận video frame
         print(f"[Manager] Đặt session ID dự kiến: {client_id}")
         self.current_session_client_id = client_id 
         
+        print(f"[Manager] Đang gửi yêu cầu kết nối tới client: {client_id}")
         self.app.connect_to_client(client_id)
 
     def gui_disconnect_session(self):
@@ -166,7 +196,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "10.10.59.122"
+    HOST = "10.10.58.92"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 
@@ -174,10 +204,42 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # 3. Khởi tạo GUI
-    window = ManagerWindow()
+    from src.manager.gui.manager_gui import LoginDialog
+    login_dialog = LoginDialog()
+    result = login_dialog.exec()
+    if result != 1:
+        sys.exit()
     
-    # 4. Khởi tạo Logic Manager
-    manager_logic = Manager(HOST, PORT, MANAGER_ID)
+    # 4. Tạo connection để auth và lấy thông tin user (tùy chọn)
+    from src.client.auth import ClientConnection
+    try:
+        conn = ClientConnection()
+        token = conn.client_login(login_dialog.username, login_dialog.password)
+        if not token:
+            print("Cảnh báo: Đăng nhập auth service thất bại!")
+            token = f"manager_{login_dialog.username}"
+        
+        # Lưu conn và token vào app để các GUI window khác sử dụng
+        app.conn = conn
+        app.current_user = token
+        app.current_name = login_dialog.username
+    except Exception as e:
+        print(f"Cảnh báo: Không thể kết nối auth service: {e}")
+        print("Tiếp tục chạy mà không có auth service...")
+        # Tạo dummy connection để tránh lỗi AttributeError
+        app.conn = None
+        app.current_user = f"manager_{login_dialog.username}"
+        app.current_name = login_dialog.username
+    
+    # Set dummy client_connected for GUI
+    app.client_connected = [("DESKTOP-7KK6GLB", "dummy_token")]
+    
+    from src.manager.gui.manage_clients import ManageClientsWindow
+    window = ManageClientsWindow()
+    manager_logic = Manager(HOST, PORT, MANAGER_ID, login_dialog.username, login_dialog.password)
+    
+    # Lưu manager_logic vào app để GUI có thể access
+    app.manager_logic = manager_logic
     
     # 5. Kết nối Logic và GUI
     manager_logic.client_list_updated.connect(window.update_client_list)

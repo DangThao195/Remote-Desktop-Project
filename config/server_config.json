@@ -1,0 +1,28 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "use_tls": true,
+    "cert_file": "src/server.crt",
+    "key_file": "src/server.key"
+  },
+  "auth_server": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 5001
+  },
+  "database": {
+    "host": "localhost",
+    "user": "root",
+    "password": "@Hung1012",
+    "database": "pbl4"
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file": "log/server.log"
+  },
+  "limits": {
+    "max_file_size": 10485760
+  }
+}

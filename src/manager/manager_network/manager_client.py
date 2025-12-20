@@ -2,8 +2,8 @@
 
 import socket
 import ssl
-from common_network.x224_handshake import X224Handshake, CONFIRM_MAGIC
-from common_network.security_layer_tls import create_client_context, client_wrap_socket
+from src.common.network.x224_handshake import X224Handshake, CONFIRM_MAGIC
+from src.common.network.security_layer_tls import create_client_context, client_wrap_socket
 
 class ManagerClient:
     """

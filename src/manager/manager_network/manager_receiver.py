@@ -4,17 +4,17 @@ import threading
 import struct
 import ssl
 from collections import defaultdict
-from common_network.mcs_layer import MCSLite
-from common_network.pdu_parser import PDUParser
-from common_network.tpkt_layer import TPKTLayer
-from common_network.constants import (
+from src.common.network.mcs_layer import MCSLite
+from src.common.network.pdu_parser import PDUParser
+from src.common.network.tpkt_layer import TPKTLayer
+from src.common.network.constants import (
     SHARE_CTRL_HDR_FMT, SHARE_HDR_SIZE,
     FRAGMENT_FLAG, FRAGMENT_HDR_FMT, FRAGMENT_HDR_SIZE,
     PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT, PDU_TYPE_CURSOR,
     PDU_TYPE_FILE_START, PDU_TYPE_FILE_CHUNK, PDU_TYPE_FILE_END, 
     PDU_TYPE_FILE_ACK, PDU_TYPE_FILE_NAK
 )
-from manager.manager_constants import ALL_CHANNELS
+from src.manager.manager_constants import ALL_CHANNELS
 
 class ManagerReceiver(threading.Thread):
     """
@@ -125,8 +125,12 @@ class ManagerReceiver(threading.Thread):
                 continue
 
             if parsed and parsed.get("type") != "fragment_pending":
-                if parsed.get("type") in ("control", "cursor", "input"):
-                    print(f"[ManagerReceiver] NHẬN GÓI TIN NHỎ: {parsed.get('type')} Channel: {channel_id}")
+                # [DEBUG] In log cho TẤT CẢ loại PDU, đặc biệt là video
+                pdu_type = parsed.get('type')
+                if pdu_type in ("control", "cursor", "input"):
+                    print(f"[ManagerReceiver] NHẬN GÓI TIN NHỎ: {pdu_type} Channel: {channel_id}")
+                elif pdu_type in ("full", "rect"):
+                    print(f"[ManagerReceiver] ✅ NHẬN VIDEO PDU: {pdu_type} Channel: {channel_id}")
                 parsed["_raw_payload"] = pdu_bytes
                 
                 # Đẩy PDU (dict) vào hàng đợi chung

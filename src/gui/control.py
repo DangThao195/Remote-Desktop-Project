@@ -1,3 +1,5 @@
+# src/gui/control.py
+
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,

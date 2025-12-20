@@ -1,5 +1,9 @@
+# src/gui/client_gui.py
+
 import sys
 import socket
+import threading
+import time
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
     QHBoxLayout, QLineEdit, QFrame, QMessageBox, QSizePolicy,
@@ -16,6 +20,7 @@ CARD_BG = "#181818"
 TEXT_LIGHT = "#FFFFFF"
 SUBTEXT = "#B3B3B3"
 SPOTIFY_GREEN = "#1DB954"
+RED_COLOR = "#E74C3C"
 
 
 def get_local_ip():
@@ -40,6 +45,11 @@ class ClientWindow(QWidget):
         self.user = user
         self.token = token
         self.is_editing = False
+        
+        # Backend client service
+        self.client_service = None
+        self.client_thread = None
+        self.is_service_running = False
 
         self.init_ui()
 
@@ -144,28 +154,29 @@ class ClientWindow(QWidget):
         ip_row.addStretch()
 
         # --- Status + connect ---
-        # self.status_label = QLabel("Status: Disconnected")
-        # self.status_label.setMaximumWidth(260)
-        # self.status_label.setStyleSheet(f"color: {SUBTEXT}; font-size: 10pt;")
+        self.status_label = QLabel("Trạng thái: Chưa kết nối")
+        self.status_label.setMaximumWidth(260)
+        self.status_label.setStyleSheet(f"color: {SUBTEXT}; font-size: 10pt;")
 
-        # self.connect_btn = QPushButton("Stop to connect")
-        # self.connect_btn.setFixedHeight(38)
-        # self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        # self.connect_btn.setStyleSheet(f"""
-        #     QPushButton {{
-        #         background-color: {SPOTIFY_GREEN};
-        #         color: black;
-        #         border-radius: 8px;
-        #         font-weight: bold;
-        #     }}
-        #     QPushButton:pressed {{ background-color: #15a945; }}
-        # """)
+        self.connect_btn = QPushButton("Bắt đầu dịch vụ")
+        self.connect_btn.setFixedHeight(38)
+        self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.connect_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {SPOTIFY_GREEN};
+                color: black;
+                border-radius: 8px;
+                font-weight: bold;
+            }}
+            QPushButton:pressed {{ background-color: #15a945; }}
+        """)
+        self.connect_btn.clicked.connect(self.toggle_client_service)
 
         card_layout.addLayout(top_bar)
         card_layout.addWidget(ip_label)
         card_layout.addLayout(ip_row)
-        # card_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignLeft)
-        # card_layout.addWidget(self.connect_btn)
+        card_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignLeft)
+        card_layout.addWidget(self.connect_btn)
 
         # --- Device List ---
         list_label = QLabel("Danh sách ghép nối:")
@@ -285,9 +296,134 @@ class ClientWindow(QWidget):
         self.close()
 
     def Logout(self):
+        # Stop client service if running
+        if self.is_service_running:
+            self.stop_client_service()
+        
         QApplication.instance().conn.client_logout(self.token)
         QApplication.instance().current_user = None
         from src.gui.signin import SignInWindow
         self.signin_window = SignInWindow()
         self.signin_window.showMaximized()
         self.close()
+    
+    def toggle_client_service(self):
+        """Start or stop the client backend service"""
+        if self.is_service_running:
+            self.stop_client_service()
+        else:
+            self.start_client_service()
+    
+    def start_client_service(self):
+        """Start the client backend service (screenshot, monitoring, network)"""
+        try:
+            from src.client.client import Client
+            from config import server_config
+            
+            # Get server configuration
+            host = server_config.SERVER_IP
+            port = server_config.CLIENT_PORT
+            
+            # Create client instance
+            self.client_service = Client(host, port, fps=10, logger=self.log_message)
+            
+            # Configure screenshot
+            self.client_service.screenshot.detect_delta = True
+            self.client_service.screenshot.quality = 65
+            
+            # Start client in a separate thread
+            self.client_thread = threading.Thread(
+                target=self._run_client_service,
+                daemon=True
+            )
+            self.client_thread.start()
+            
+            self.is_service_running = True
+            self.status_label.setText("Trạng thái: Đang kết nối...")
+            self.status_label.setStyleSheet(f"color: {SPOTIFY_GREEN}; font-size: 10pt;")
+            self.connect_btn.setText("Dừng dịch vụ")
+            self.connect_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {RED_COLOR};
+                    color: white;
+                    border-radius: 8px;
+                    font-weight: bold;
+                }}
+                QPushButton:pressed {{ background-color: #C0392B; }}
+            """)
+            
+            self.log_message("[GUI] Dịch vụ client đã được khởi động")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Không thể khởi động dịch vụ: {e}")
+            self.log_message(f"[GUI] Lỗi khởi động: {e}")
+    
+    def _run_client_service(self):
+        """Run the client service in background thread"""
+        try:
+            if self.client_service.start():
+                self.status_label.setText("Trạng thái: Đã kết nối")
+                while self.client_service.network.running and self.is_service_running:
+                    time.sleep(1)
+            else:
+                self.status_label.setText("Trạng thái: Kết nối thất bại")
+                self.status_label.setStyleSheet(f"color: {RED_COLOR}; font-size: 10pt;")
+                self.is_service_running = False
+        except Exception as e:
+            self.log_message(f"[GUI] Lỗi dịch vụ: {e}")
+            self.is_service_running = False
+    
+    def stop_client_service(self):
+        """Stop the client backend service"""
+        try:
+            self.is_service_running = False
+            
+            if self.client_service:
+                self.client_service.stop()
+                self.client_service = None
+            
+            if self.client_thread:
+                self.client_thread.join(timeout=2.0)
+                self.client_thread = None
+            
+            self.status_label.setText("Trạng thái: Đã ngắt kết nối")
+            self.status_label.setStyleSheet(f"color: {SUBTEXT}; font-size: 10pt;")
+            self.connect_btn.setText("Bắt đầu dịch vụ")
+            self.connect_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {SPOTIFY_GREEN};
+                    color: black;
+                    border-radius: 8px;
+                    font-weight: bold;
+                }}
+                QPushButton:pressed {{ background-color: #15a945; }}
+            """)
+            
+            self.log_message("[GUI] Dịch vụ client đã dừng")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Không thể dừng dịch vụ: {e}")
+            self.log_message(f"[GUI] Lỗi khi dừng: {e}")
+    
+    def log_message(self, message):
+        """Log messages from backend service"""
+        print(message)
+    
+    def closeEvent(self, event):
+        """Handle window close event"""
+        if self.is_service_running:
+            reply = QMessageBox.question(
+                self, 
+                'Xác nhận', 
+                'Dịch vụ client đang chạy. Bạn có muốn dừng và thoát?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.stop_client_service()
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()

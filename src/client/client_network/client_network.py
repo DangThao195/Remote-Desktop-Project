@@ -5,13 +5,13 @@ import socket
 import ssl
 from queue import Queue, Empty
 from time import time
-from common_network.x224_handshake import X224Handshake, CONFIRM_MAGIC
-from common_network.security_layer_tls import create_client_context, client_wrap_socket
-from common_network.pdu_builder import PDUBuilder
-from common_network.mcs_layer import MCSLite
-from common_network.tpkt_layer import TPKTLayer
-from client.client_network.client_receiver import ClientReceiver
-from client.client_constants import (
+from src.common.network.x224_handshake import X224Handshake, CONFIRM_MAGIC
+from src.common.network.security_layer_tls import create_client_context, client_wrap_socket
+from src.common.network.pdu_builder import PDUBuilder
+from src.common.network.mcs_layer import MCSLite
+from src.common.network.tpkt_layer import TPKTLayer
+from src.client.client_network.client_receiver import ClientReceiver
+from src.client.client_constants import (
     CLIENT_ID, CA_FILE, 
     CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_VIDEO, CHANNEL_FILE, CHANNEL_CURSOR,
     CMD_REGISTER
@@ -109,8 +109,7 @@ class ClientNetwork:
         
         self.logger("[ClientNetwork] Đã khởi động.")
         
-        # Tự động đăng ký
-        self.register()
+        # Không tự động đăng ký nữa - Client.py sẽ gọi _login_to_server() với đầy đủ thông tin user
         return True
 
     def stop(self):

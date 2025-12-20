@@ -1,0 +1,157 @@
+# server/core/session.py
+
+import threading
+from queue import Queue, Empty
+from src.server.server_constants import (
+    CHANNEL_VIDEO, CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_FILE, CHANNEL_CURSOR,
+    CMD_DISCONNECT, CMD_SECURITY_ALERT 
+)
+from src.common.network.mcs_layer import MCSLite
+
+try:
+    from src.server.server_logger import ServerLogger
+except ImportError:
+    # Fallback nếu bạn chưa tạo file logger, tránh crash server
+    class ServerLogger:
+        @staticmethod
+        def log_alert(cid, v_type, v_msg):
+            print(f"[LOGGER-FALLBACK] {cid} | {v_type} | {v_msg}")
+
+# Luồng (thread) xử lý phiên làm việc giữa 1 Manager và 1 Client
+class ServerSession(threading.Thread):
+    def __init__(self, manager_id, client_id, broadcaster, done_callback):
+        self.session_id = f"{manager_id}::{client_id}"
+        super().__init__(daemon=True, name=f"Session-{self.session_id}")
+        
+        self.manager_id = manager_id
+        self.client_id = client_id
+        self.broadcaster = broadcaster
+        self.done_callback = done_callback # Báo cho SessionManager khi kết thúc
+        
+        self.pdu_queue = Queue(maxsize=4096) # Queue riêng của phiên này
+        self.running = True
+
+    # Hàm để SessionManager gọi khi có PDU mới từ Client/Manager
+    def enqueue_pdu(self, from_id, pdu):
+        if not self.running:
+            return
+            
+        # 1. Nếu PDU mới là Video/Cursor và queue đầy -> Hủy bỏ PDU mới (ít quan trọng hơn)
+        if pdu.get("type") in ("full", "rect") and self.pdu_queue.full(): 
+            return # Bỏ PDU mới
+
+        try:
+            self.pdu_queue.put((from_id, pdu), block=False)
+        except Queue.Full:
+            # 2. Nếu PDU mới là Control/Input/File (quan trọng) và queue vẫn đầy,
+            #  => bỏ PDU cũ nhất (có khả năng là Video/Cursor) để chèn PDU mới
+            if pdu.get("type") not in ("full", "rect"):
+                try: 
+                    self.pdu_queue.get_nowait() # Loại bỏ 1 phần tử cũ nhất
+                    self.pdu_queue.put((from_id, pdu), block=False) # Chèn PDU quan trọng mới
+                except: 
+                    pass # Nếu vẫn không thể chèn (rất hiếm), bỏ qua
+            
+    def run(self):
+        print(f"[ServerSession-{self.session_id}] Đã khởi động.")
+        reason = "Unknown"
+        
+        try:
+            while self.running:
+                try:
+                    from_id, pdu = self.pdu_queue.get(timeout=0.5)
+                except Empty:
+                    continue
+                
+                # --- Quy tắc chuyển tiếp (Routing) ---
+                ptype = pdu.get("type")
+                raw_payload = pdu.get("_raw_payload")
+                
+                if not raw_payload:
+                    continue
+
+                # --- Từ Client -> Gửi cho Manager ---
+                if from_id == self.client_id:
+                    target_id = self.manager_id
+                    
+                    if ptype in ("full", "rect"):
+                        # (Video) Gửi trên kênh VIDEO
+                        mcs_frame = MCSLite.build(CHANNEL_VIDEO, raw_payload)
+                    elif ptype == "cursor":
+                        # (Cursor) Gửi trên kênh CURSOR
+                        mcs_frame = MCSLite.build(CHANNEL_CURSOR, raw_payload)
+                    elif ptype == "control":
+                        # (Control) Gửi trên kênh CONTROL
+                        msg = pdu.get("message", "")
+
+                        # --- Xử lý các lệnh Control đặc biệt ---
+                        if msg == CMD_DISCONNECT:
+                            reason = f"Client {self.client_id} yêu cầu ngắt kết nối."
+                            self.running = False
+                        
+                        # --- Bắt lệnh Security Alert để ghi Log ---
+                        elif msg.startswith(CMD_SECURITY_ALERT):
+                            # msg format: "security_alert: Loại vi phạm|Chi tiết"
+                            try:
+                                content = msg.split(":", 1)[1] # Tách nội dung sau dấu hai chấm đầu tiên
+                                # Tách loại và chi tiết
+                                if "|" in content:
+                                    v_type, v_detail = content.split("|", 1)
+                                else:
+                                    v_type, v_detail = "General", content
+                                
+                                # Ghi vào file log trên Server
+                                ServerLogger.log_alert(self.client_id, v_type, v_detail)
+                                
+                                # Lưu ý: Sau khi log xong, code vẫn chạy xuống dưới 
+                                # để đóng gói mcs_frame và gửi cho Manager (Forwarding)
+                            except Exception as e:
+                                print(f"[ServerSession] Lỗi parse alert: {e}")
+
+                        mcs_frame = MCSLite.build(CHANNEL_CONTROL, raw_payload)
+
+                    elif ptype == "input":
+                        # (Input - ví dụ: keylogger) Gửi trên kênh INPUT
+                        mcs_frame = MCSLite.build(CHANNEL_INPUT, raw_payload)
+                    else:
+                        # (File) Gửi trên kênh FILE
+                        mcs_frame = MCSLite.build(CHANNEL_FILE, raw_payload)
+                        
+                    self.broadcaster.enqueue(target_id, mcs_frame)
+                    
+                # --- Từ Manager -> Gửi cho Client ---
+                elif from_id == self.manager_id:
+                    target_id = self.client_id
+                    
+                    if ptype == "input":
+                        # (Input) Gửi trên kênh INPUT
+                        mcs_frame = MCSLite.build(CHANNEL_INPUT, raw_payload)
+                    elif ptype == "control":
+                        # (Control) Gửi trên kênh CONTROL
+                        if pdu.get("message") == CMD_DISCONNECT:
+                            reason = f"Manager {self.manager_id} yêu cầu ngắt kết nối."
+                            self.running = False
+                        mcs_frame = MCSLite.build(CHANNEL_CONTROL, raw_payload)
+                    elif ptype != "full" and ptype != "rect" and ptype != "cursor":
+                        # (File) và các PDU khác không phải video/cursor
+                         mcs_frame = MCSLite.build(CHANNEL_FILE, raw_payload)
+                    else:
+                        continue
+                    
+                    self.broadcaster.enqueue(target_id, mcs_frame)
+                    
+                if not self.running:
+                    break # Thoát vòng lặp
+                    
+        except Exception as e:
+            reason = f"Lỗi nghiêm trọng: {e}"
+            print(f"[ServerSession-{self.session_id}] Lỗi: {e}")
+        finally:
+            self.running = False
+            self.done_callback(self, reason)
+            print(f"[ServerSession-{self.session_id}] Đã dừng. Lý do: {reason}")
+
+    def stop(self):
+        self.running = False
+        with self.pdu_queue.mutex:
+            self.pdu_queue.queue.clear()

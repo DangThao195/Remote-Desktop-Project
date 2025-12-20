@@ -118,24 +118,28 @@ class SignInWindow(QWidget):
         if not username or not password:
             QMessageBox.warning(None, "Error", "Please fill in all fields!")
             return
+        
+        # Đăng nhập với server
         token = QApplication.instance().conn.client_login(username, password) 
         if not token:
             QMessageBox.critical(None, "Error", "Sign in failed! Check your credentials.")
             return
-        QMessageBox.information(None, "Success", f"Account created for {username}!")
+        
+        # Lấy thông tin user từ database (bao gồm Role)
+        user_data = QApplication.instance().conn.client_profile(token)
+        if not user_data:
+            QMessageBox.critical(None, "Error", "Cannot get user profile!")
+            return
+        
+        QMessageBox.information(None, "Success", f"Welcome {username}!")
         self.token = token 
         QApplication.instance().current_user = token
         QApplication.instance().current_name = username
-        # from src.gui.profile import ProfileWindow
-        # from src.model.Users import User
-        # data = QApplication.instance().conn.client_profile(token)
-        # print(".. ", data)
-        # user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
-        # self.profile_window = ProfileWindow(user, token)
-        # self.profile_window.showMaximized()
-        from src.gui.manage_clients import ManageClientsWindow
-        self.manage_clients_window = ManageClientsWindow()
-        self.manage_clients_window.show()
+        
+        # Chuyển sang ClientWindow với user_data đầy đủ (có Role)
+        from src.client.client import ClientWindow
+        self.client_window = ClientWindow(user_data, token)
+        self.client_window.showMaximized()
         self.close()
 
     def sign_up(self):
