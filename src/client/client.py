@@ -63,7 +63,7 @@ class Client:
             cafile=CA_FILE, 
             logger=self.logger
         )
-        self.screenshot = ClientScreenshot(fps=fps, quality=65, max_dimension=1280)
+        self.screenshot = ClientScreenshot(fps=fps, quality=50, max_dimension=960)
         self.sender = ClientSender(self.network) # Truyền network
         self.input_handler = ClientInputHandler(logger=self.logger)
         self.cursor_tracker = ClientCursorTracker(self.network, fps=30, logger=self.logger)

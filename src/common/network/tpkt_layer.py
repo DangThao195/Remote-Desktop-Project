@@ -7,7 +7,7 @@ from src.common.network.constants import TPKT_HEADER_FMT, TPKT_OVERHEAD, MAX_TPK
 class TPKTLayer:
     # nhận chính xác n bytes từ socket 
     @staticmethod
-    def recv_exact(sock, n, recv_fn=None, timeout=10):
+    def recv_exact(sock, n, recv_fn=None, timeout=30):  # Tăng từ 10s lên 30s
         sock.settimeout(timeout)
         if recv_fn is None:
             recv_fn = sock.recv
@@ -39,7 +39,7 @@ class TPKTLayer:
 
     # đọc một TPKT đầy đủ từ socket, trả về body (PDU của lớp MCS)
     @staticmethod
-    def recv_one(sock, recv_fn=None, timeout=10):
+    def recv_one(sock, recv_fn=None, timeout=30):  # Tăng từ 10s lên 30s
         hdr = TPKTLayer.recv_exact(sock, TPKT_OVERHEAD, recv_fn=recv_fn, timeout=timeout)
         ver, rsv, total_len = struct.unpack(TPKT_HEADER_FMT, hdr)
 

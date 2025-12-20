@@ -37,11 +37,25 @@ class ClientScreenshot:
             img = img.resize((int(w*scale), int(h*scale)), RESAMPLE_MODE)
         return img
 
-    def _encode_jpeg(self, img):
+    def _encode_jpeg(self, img, adaptive=True):
         bio = io.BytesIO()
         if img.mode != "RGB":
             img = img.convert("RGB")
-        img.save(bio, format="JPEG", quality=self.quality)
+        
+        # Adaptive quality: thử quality ban đầu, nếu quá lớn thì giảm
+        current_quality = self.quality
+        if adaptive:
+            img.save(bio, format="JPEG", quality=current_quality)
+            size_kb = len(bio.getvalue()) / 1024
+            
+            # Nếu frame > 80KB, giảm quality xuống
+            if size_kb > 80:
+                bio = io.BytesIO()
+                current_quality = max(30, current_quality - 15)  # Giảm 15 điểm nhưng không dưới 30
+                img.save(bio, format="JPEG", quality=current_quality)
+        else:
+            img.save(bio, format="JPEG", quality=current_quality)
+        
         return bio.getvalue()
 
     def capture_once(self):
