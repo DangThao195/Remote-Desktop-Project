@@ -200,8 +200,20 @@ class SessionManager(threading.Thread):
                 return
             # Nếu là input điều khiển từ manager → forward tới client qua control session
         
-        # === XỬ LÝ PDU TỪ CLIENT ===
+        # === KIỂM TRA ROLE ===
         role = self.clients.get(client_id)
+        
+        # === XỬ LÝ CLIENT/MANAGER CHƯA AUTHENTICATED (role = None) ===
+        if role is None:
+            # Chỉ xử lý control PDU cho authentication (login, register)
+            if pdu_type == "control":
+                print(f"[SessionManager] Unauthenticated client {client_id} sends control PDU")
+                self.pdu_queue.put((client_id, pdu))
+            else:
+                print(f"[SessionManager] ⚠️ Ignoring {pdu_type} PDU from unauthenticated client {client_id}")
+            return
+        
+        # === XỬ LÝ PDU TỪ CLIENT (authenticated) ===
         if role == ROLE_CLIENT:
             # Client gửi video/cursor/control
             if pdu_type in ("full", "rect", "cursor"):
