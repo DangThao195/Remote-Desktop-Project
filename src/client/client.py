@@ -477,15 +477,45 @@ class Client:
         elif msg.startswith("login_fail"):
             self.logger("[Client] Đăng nhập thất bại!")
             
+        # Xử lý lệnh SESSION cũ (legacy)
         elif msg.startswith("session_started"):
             manager_id = msg.split(":")[1] if ":" in msg else "Manager"
             self.logger(f"[Client] ==> Manager {manager_id} đã kết nối! Bắt đầu gửi video.")
             self.in_session = True
             self.screenshot.force_full_frame()
+        
+        # Xử lý lệnh VIEW mới (chỉ xem màn hình)
+        elif msg.startswith("view_started"):
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.logger(f"[Client] ==> Manager {manager_id} đang xem màn hình (VIEW mode)")
+            self.in_session = True
+            self.screenshot.force_full_frame()
+        
+        # Xử lý lệnh CONTROL mới (xem + điều khiển)
+        elif msg.startswith("control_started"):
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.logger(f"[Client] ==> Manager {manager_id} đang điều khiển (CONTROL mode)")
+            self.in_session = True
+            self.remote_control_enabled = True  # Bật điều khiển từ xa
+            self.screenshot.force_full_frame()
             
         elif msg == "session_ended":
             self.logger("[Client] Session ended")
             self.in_session = False
+        
+        # Xử lý kết thúc VIEW
+        elif msg.startswith("view_ended"):
+            self.logger("[Client] VIEW session ended")
+            # Kiểm tra còn viewer nào khác không
+            # Nếu không còn viewer và không có controller, tắt session
+            if not self.in_session:  # Nếu không còn session nào
+                self.in_session = False
+        
+        # Xử lý kết thúc CONTROL
+        elif msg.startswith("control_ended"):
+            self.logger("[Client] CONTROL session ended")
+            self.in_session = False
+            self.remote_control_enabled = False  # Tắt điều khiển từ xa
             
         elif msg == "request_refresh":
             if self.in_session:
