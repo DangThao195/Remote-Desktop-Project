@@ -119,9 +119,19 @@ class Client:
         if not self.network.start():
             self.logger("[Client] Không thể kết nối tới server.")
             return False
+        
+        self.logger("[Client] ✅ Network đã khởi động thành công")
             
         # 2. Login với server
-        self._login_to_server()
+        print("[DEBUG] About to call _login_to_server()")
+        try:
+            self._login_to_server()
+            print("[DEBUG] _login_to_server() completed successfully")
+        except Exception as e:
+            print(f"[DEBUG] ERROR in _login_to_server(): {e}")
+            import traceback
+            traceback.print_exc()
+            return False
         
         # 3. Khởi động Sender
         self.sender.start()
