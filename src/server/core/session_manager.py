@@ -332,6 +332,8 @@ class SessionManager(threading.Thread):
             msg = pdu.get("message", "")
             if isinstance(msg, bytes):
                 msg = msg.decode("utf-8") # Decode nếu cần
+            
+            print(f"[SessionManager _handle_control_logic] client_id={client_id}, msg={msg[:100]}")
 
             # 1. Xử lý LOGIN
             if msg.startswith(CMD_LOGIN):

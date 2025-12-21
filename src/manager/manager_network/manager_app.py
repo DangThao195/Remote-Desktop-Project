@@ -191,9 +191,13 @@ class ManagerApp:
     def register(self):
         print("[ManagerApp] Đăng ký với server...")
         if self.username and self.password:
-            self._send_control_pdu(f"{CMD_LOGIN}{self.username}:{self.password}:manager")
+            login_msg = f"{CMD_LOGIN}{self.username}:{self.password}:manager"
+            print(f"[ManagerApp] Sending LOGIN: {login_msg}")
+            self._send_control_pdu(login_msg)
         else:
-            self._send_control_pdu(f"{CMD_REGISTER}manager")
+            register_msg = f"{CMD_REGISTER}manager"
+            print(f"[ManagerApp] Sending REGISTER: {register_msg}")
+            self._send_control_pdu(register_msg)
 
     def request_client_list(self):
         self._send_control_pdu(CMD_LIST_CLIENTS)
