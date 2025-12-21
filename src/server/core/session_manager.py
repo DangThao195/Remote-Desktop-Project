@@ -750,7 +750,11 @@ class SessionManager(threading.Thread):
     def _start_control_session(self, manager_id, client_id):
         """
         Bắt đầu CONTROL session: Manager điều khiển Client (1-1 exclusive)
-        Chỉ 1 manager có thể control 1 client tại 1 thời điểm
+        
+        LOGIC MỚI:
+        - Nếu chưa có ViewSession → Tự động tạo ViewSession trước
+        - Sau đó tạo ControlSession để bật quyền điều khiển
+        - Manager sẽ VỪA xem màn hình VỪA điều khiển
         """
         # Validation TRONG lock
         with self.lock:
@@ -767,6 +771,8 @@ class SessionManager(threading.Thread):
                 error_type = "manager_busy"
             else:
                 error_type = None
+                # Check xem đã có ViewSession chưa
+                needs_view_session = client_id not in self.view_sessions or not self.view_sessions[client_id].is_viewing(manager_id)
         
         # Send error OUTSIDE lock
         if error_type == "not_exist":
@@ -778,6 +784,17 @@ class SessionManager(threading.Thread):
         elif error_type == "manager_busy":
             self._send_control_pdu(manager_id, f"{CMD_ERROR}:Bạn đang điều khiển client khác")
             return False
+        
+        # Nếu chưa có ViewSession → Tạo trước (để xem màn hình)
+        if needs_view_session:
+            print(f"[ControlSession] Auto-creating ViewSession first...")
+            view_success = self._start_view_session(manager_id, client_id)
+            if not view_success:
+                print(f"[ControlSession] ❌ Failed to create ViewSession, aborting CONTROL")
+                return False
+            print(f"[ControlSession] ✅ ViewSession created successfully")
+        else:
+            print(f"[ControlSession] ViewSession already exists, skipping creation")
         
         # Tạo ControlSession (OUTSIDE lock)
         print(f"[ControlSession] Starting: Manager({manager_id}) <-> Client({client_id})")
@@ -814,6 +831,10 @@ class SessionManager(threading.Thread):
     def _stop_control_session(self, manager_id):
         """
         Dừng CONTROL session của manager
+        
+        LOGIC MỚI:
+        - Chỉ TẮT quyền điều khiển
+        - KHÔNG tắt ViewSession → Manager VẪN XEM màn hình
         """
         with self.lock:
             if manager_id not in self.manager_sessions:
@@ -828,10 +849,16 @@ class SessionManager(threading.Thread):
                 control_session = self.control_sessions[client_id]
                 control_session.stop()
                 # _on_control_session_done sẽ được gọi tự động
+        
+        print(f"[ControlSession] Stopped control for manager {manager_id}, but VIEW session remains active")
     
     def _on_control_session_done(self, control_session, reason):
         """
         Callback khi ControlSession kết thúc
+        
+        LOGIC MỚI:
+        - Chỉ xóa ControlSession
+        - KHÔNG xóa ViewSession → Manager vẫn xem màn hình
         """
         print(f"[ControlSession] Ended: {control_session.session_id}. Reason: {reason}")
         
