@@ -324,8 +324,8 @@ class ClientWindow(QWidget):
             host = server_config.SERVER_IP
             port = server_config.CLIENT_PORT
             
-            # Create client instance
-            self.client_service = Client(host, port, fps=10, logger=self.log_message)
+            # Create client instance (1 frame mỗi ~3s, tăng tốc tự động khi CONTROL)
+            self.client_service = Client(host, port, fps=0.33, logger=self.log_message)
             
             # Configure screenshot
             self.client_service.screenshot.detect_delta = True

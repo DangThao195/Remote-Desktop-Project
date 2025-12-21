@@ -14,9 +14,9 @@ except AttributeError:
 
 
 class ClientScreenshot:
-    def __init__(self, fps=0.2, quality=85, max_dimension=1920, detect_delta=False):
+    def __init__(self, fps=0.33, quality=85, max_dimension=1920, detect_delta=False):
         """
-        fps: Frame per second (0.2 = 1 frame mỗi 5 giây, 0.33 = 1 frame mỗi 3 giây)
+        fps: Frame per second (0.33 = 1 frame mỗi ~3 giây)
         quality: Chất lượng JPEG (85 = chất lượng cao)
         max_dimension: Độ phân giải tối đa (1920 = Full HD)
         detect_delta: Tắt delta detection để ưu tiên chất lượng
@@ -104,10 +104,11 @@ class ClientScreenshot:
             self._force_full = True
 
     def capture_loop(self, callback):
-        interval = 1.0 / self.fps
         print(f"[ClientScreenshot] Bắt đầu capture loop (Hybrid Mode: Full + Rect)...")
 
         while not self.stop:
+            # Cho phép thay đổi fps động theo chế độ (view/control)
+            interval = 1.0 / max(self.fps, 0.01)
             start_time = time.perf_counter()
             
             try:
