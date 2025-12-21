@@ -135,27 +135,47 @@ class SessionManager(threading.Thread):
         
         elif role == ROLE_CLIENT:
             # Client disconnect → Dừng tất cả sessions liên quan đến client
+            print(f"[Disconnect] Cleaning up sessions for client {client_id}")
+            
+            # Dừng view session
             with self.lock:
-                # Dừng view session
                 if client_id in self.view_sessions:
                     view_session = self.view_sessions[client_id]
                     viewers = list(view_session.viewers)
                     view_session.stop()
                     del self.view_sessions[client_id]
-                    
-                    # Thông báo cho tất cả viewers
-                    for viewer_id in viewers:
-                        self._send_control_pdu(viewer_id, f"{CMD_VIEW_STOPPED}:{client_id}")
+                    print(f"[Disconnect] Cleaned up ViewSession for {client_id}")
+            
+            # Thông báo cho tất cả viewers (OUTSIDE lock)
+            if client_id in locals() and 'viewers' in locals():
+                for viewer_id in viewers:
+                    self._send_control_pdu(viewer_id, f"{CMD_VIEW_STOPPED}:{client_id}")
+                    with self.lock:
                         if viewer_id in self.manager_sessions:
                             if client_id in self.manager_sessions[viewer_id]["view"]:
                                 self.manager_sessions[viewer_id]["view"].remove(client_id)
-                
-                # Dừng control session
+            
+            # Dừng control session và cleanup NGAY LẬP TỨC
+            with self.lock:
                 if client_id in self.control_sessions:
                     control_session = self.control_sessions[client_id]
                     manager_id = control_session.manager_id
+                    
+                    # Cleanup trực tiếp thay vì chờ callback
+                    print(f"[Disconnect] Cleaning up ControlSession for {client_id}")
                     control_session.stop()
-                    # _on_control_session_done sẽ được gọi tự động
+                    del self.control_sessions[client_id]
+                    
+                    # Cập nhật manager_sessions
+                    if manager_id in self.manager_sessions:
+                        self.manager_sessions[manager_id]["control"] = None
+                    
+                    print(f"[Disconnect] ✅ ControlSession cleaned up for {client_id}")
+            
+            # Thông báo cho manager (OUTSIDE lock)
+            if 'manager_id' in locals() and manager_id:
+                self._send_control_pdu(manager_id, f"{CMD_CONTROL_STOPPED}:{client_id}")
+                print(f"[Disconnect] Notified manager {manager_id} about control_stopped")
         
         # 3. Legacy: Dừng old-style session (nếu có)
         with self.lock:
