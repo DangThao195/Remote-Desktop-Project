@@ -632,7 +632,14 @@ class SessionManager(threading.Thread):
         seq = self._next_seq()
         pdu_bytes = self.builder.build_control_pdu(seq, message.encode())
         mcs_frame = MCSLite.build(CHANNEL_CONTROL, pdu_bytes)
-        self.broadcaster.enqueue(target_id, mcs_frame)  # Dùng enqueue, không phải send_to_client
+        print(f"[SessionManager] 📤 Sending CONTROL PDU to {target_id}: {message[:80]}...")
+        try:
+            self.broadcaster.enqueue(target_id, mcs_frame)
+            print(f"[SessionManager] ✅ Enqueued PDU for {target_id}")
+        except Exception as e:
+            print(f"[SessionManager] ❌ Failed to enqueue PDU for {target_id}: {e}")
+            import traceback
+            traceback.print_exc()
     
     # [THÊM] Xử lý INPUT PDU (keylog) - Lưu DB và forward tới manager
     def _handle_input_pdu(self, client_id, pdu):

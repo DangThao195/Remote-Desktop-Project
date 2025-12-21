@@ -1057,3 +1057,28 @@
 2025-12-21 19:42:52,410 - src.server.server - INFO - Starting Auth Server in separate thread
 2025-12-21 19:42:52,411 - src.server.server - INFO - Auth Server thread started
 2025-12-21 19:42:52,412 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-21 19:53:27,981 - src.server.server - INFO - ================================================================================
+2025-12-21 19:53:27,984 - src.server.server - INFO - Starting Unified Server
+2025-12-21 19:53:27,986 - src.server.server - INFO - ================================================================================
+2025-12-21 19:53:27,986 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-21 19:53:27,987 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-21 19:53:27,993 - src.server.server - INFO - Main Server started successfully
+2025-12-21 19:53:27,993 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-21 19:53:27,995 - src.server.server - INFO - Auth Server thread started
+2025-12-21 19:53:27,995 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-21 23:14:59,361 - src.server.server - INFO - ================================================================================
+2025-12-21 23:14:59,363 - src.server.server - INFO - Starting Unified Server
+2025-12-21 23:14:59,367 - src.server.server - INFO - ================================================================================
+2025-12-21 23:14:59,385 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-21 23:14:59,398 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-21 23:14:59,568 - src.server.server - INFO - Main Server started successfully
+2025-12-21 23:14:59,569 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-21 23:14:59,593 - src.server.server - INFO - Auth Server thread started
+2025-12-21 23:14:59,595 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-21 23:16:39,767 - src.server.server - INFO - 
+================================================================================
+2025-12-21 23:16:39,768 - src.server.server - INFO - Shutdown signal received
+2025-12-21 23:16:39,769 - src.server.server - INFO - ================================================================================
+2025-12-21 23:16:39,769 - src.server.server - INFO - Stopping Main Server...
+2025-12-21 23:16:39,772 - src.server.server - INFO - Main Server stopped
+2025-12-21 23:16:39,773 - src.server.server - INFO - Server shutdown complete
