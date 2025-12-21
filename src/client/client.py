@@ -512,16 +512,13 @@ class Client:
         # Xử lý kết thúc VIEW
         elif msg.startswith("view_ended"):
             self.logger("[Client] VIEW session ended")
-            # Kiểm tra còn viewer nào khác không
-            # Nếu không còn viewer và không có controller, tắt session
-            if not self.in_session:  # Nếu không còn session nào
-                self.in_session = False
             manager_id = msg.split(":")[1] if ":" in msg else None
-            if manager_id and manager_id in self.connected_managers:
+            if manager_id:
                 self.connected_managers.discard(manager_id)
-                self._log_connected_managers()
             if not self.connected_managers:
+                self.in_session = False
                 self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
         
         # Xử lý kết thúc CONTROL
         elif msg.startswith("control_ended"):
@@ -529,11 +526,33 @@ class Client:
             self.in_session = False
             self.remote_control_enabled = False  # Tắt điều khiển từ xa
             manager_id = msg.split(":")[1] if ":" in msg else None
-            if manager_id and manager_id in self.connected_managers:
+            if manager_id:
                 self.connected_managers.discard(manager_id)
-                self._log_connected_managers()
             if not self.connected_managers:
                 self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
+
+        # Một số server có thể gửi *_stopped thay vì *_ended
+        elif msg.startswith("view_stopped"):
+            self.logger("[Client] VIEW session stopped")
+            manager_id = msg.split(":")[1] if ":" in msg else None
+            if manager_id:
+                self.connected_managers.discard(manager_id)
+            if not self.connected_managers:
+                self.in_session = False
+                self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
+
+        elif msg.startswith("control_stopped"):
+            self.logger("[Client] CONTROL session stopped")
+            manager_id = msg.split(":")[1] if ":" in msg else None
+            self.remote_control_enabled = False
+            if manager_id:
+                self.connected_managers.discard(manager_id)
+            if not self.connected_managers:
+                self.in_session = False
+                self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
             
         elif msg == "request_refresh":
             if self.in_session:

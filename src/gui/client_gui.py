@@ -178,8 +178,8 @@ class ClientWindow(QWidget):
         card_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignLeft)
         card_layout.addWidget(self.connect_btn)
 
-        # --- Device List ---
-        list_label = QLabel("Danh sách ghép nối:")
+        # --- Device List (Managers connected) ---
+        list_label = QLabel("Danh sách ghép nối (Managers):")
         list_label.setStyleSheet("font-size: 11pt; font-weight: bold;")
 
         scroll = QScrollArea()
@@ -192,17 +192,9 @@ class ClientWindow(QWidget):
         self.list_layout.setSpacing(10)
         scroll.setWidget(list_container)
 
-        # Danh sách client mẫu
-        same, temp_list = QApplication.instance().conn.client_get_client_list(self.token)
-        self.client_list = temp_list
-        
-        # self.client_list = [
-        #     {"name": "Client A", "allowed": False},
-        #     {"name": "Client B", "allowed": False},
-        #     {"name": "Client C", "allowed": False},
-        # ]
-
-        self.render_client_list()
+        # Khởi tạo danh sách managers đang kết nối
+        self.manager_list = []
+        self.render_manager_list()
 
         card_layout.addWidget(list_label)
         card_layout.addWidget(scroll)
@@ -214,8 +206,11 @@ class ClientWindow(QWidget):
         
         self.update_signal.connect(self.update_list_ui)
 
-        import threading
-        threading.Thread(target=self.get_request_client_list, daemon=True).start()
+        # Timer để refresh danh sách managers đang kết nối
+        from PyQt6.QtCore import QTimer
+        self.manager_timer = QTimer(self)
+        self.manager_timer.setInterval(2000)
+        self.manager_timer.timeout.connect(self.refresh_manager_list)
 
         
     # --- Các hàm xử lý ---
@@ -256,14 +251,8 @@ class ClientWindow(QWidget):
             self.list_layout.addWidget(frame)
 
     def toggle_client_permission(self, index):
-        client = self.client_list[index]
-        client["allowed"] = not client["allowed"]
-        # send gì đó
-        if (client["allowed"]):
-            QApplication.instance().conn.client_accepted_connect(self.token, client["name"])
-        else:
-            QApplication.instance().conn.client_remove_connect(self.token, client["name"])
-        self.render_client_list()
+        # Legacy, not used anymore
+        pass
     
     
     # tiến trình => gửi yêu cầu lên server và nhận danh sách , mỗi 30s gửi nhận 1 lần , nếu có thay đổi thì cập nhật lại giao diện
@@ -271,19 +260,20 @@ class ClientWindow(QWidget):
     # tạo kết nối riêng để lấy danh sách client
 
     def update_list_ui(self, new_list):
-        self.client_list = new_list
-        self.render_client_list()   # SAFE (vì đang ở main thread)
+        # Legacy, not used anymore
+        pass
 
-    def get_request_client_list(self):
-        from src.client.auth import ClientConnection
-        import time
-        AA = ClientConnection()
-        while True:
-            same, temp_list = AA.client_get_client_list(self.token)
-            if same:
-                self.update_signal.emit(temp_list)  # gửi signal về main thread
+    def refresh_manager_list(self):
+        """Cập nhật danh sách managers đang kết nối từ Client backend"""
+        try:
+            if self.is_service_running and self.client_service:
+                self.manager_list = sorted(list(self.client_service.connected_managers))
+            else:
+                self.manager_list = []
+        except Exception:
+            self.manager_list = []
 
-            time.sleep(10)
+        self.render_manager_list()
             
     def copy_ip(self):
         QApplication.clipboard().setText(self.ip_field.text())
@@ -307,37 +297,70 @@ class ClientWindow(QWidget):
         self.signin_window.showMaximized()
         self.close()
     
+    def render_manager_list(self):
+        # Clear old items
+        for i in reversed(range(self.list_layout.count())):
+            widget = self.list_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        if not getattr(self, "manager_list", None):
+            empty = QLabel("Chưa có manager nào kết nối")
+            empty.setStyleSheet("color: #888; font-size: 10pt;")
+            self.list_layout.addWidget(empty)
+            return
+
+        for manager_id in self.manager_list:
+            row = QHBoxLayout()
+            name_label = QLabel(manager_id)
+            name_label.setStyleSheet("font-size: 11pt;")
+
+            badge = QLabel("Đang online")
+            badge.setStyleSheet(f"""
+                background-color: #1e5128;
+                color: {SPOTIFY_GREEN};
+                padding: 4px 10px;
+                border-radius: 8px;
+                font-size: 9pt;
+            """)
+
+            row.addWidget(name_label)
+            row.addStretch()
+            row.addWidget(badge)
+
+            frame = QFrame()
+            frame.setLayout(row)
+            frame.setStyleSheet("background-color: #0f0f0f; border-radius: 8px; padding: 6px;")
+            self.list_layout.addWidget(frame)
+
+    # === Service control ===
     def toggle_client_service(self):
-        """Start or stop the client backend service"""
         if self.is_service_running:
             self.stop_client_service()
         else:
             self.start_client_service()
-    
+
     def start_client_service(self):
         """Start the client backend service (screenshot, monitoring, network)"""
         try:
             from src.client.client import Client
             from config import server_config
-            
-            # Get server configuration
+
             host = server_config.SERVER_IP
             port = server_config.CLIENT_PORT
-            
-            # Create client instance (1 frame mỗi ~3s, tăng tốc tự động khi CONTROL)
+
             self.client_service = Client(host, port, fps=0.33, logger=self.log_message)
-            
+
             # Configure screenshot
             self.client_service.screenshot.detect_delta = True
             self.client_service.screenshot.quality = 65
-            
-            # Start client in a separate thread
+
             self.client_thread = threading.Thread(
                 target=self._run_client_service,
                 daemon=True
             )
             self.client_thread.start()
-            
+
             self.is_service_running = True
             self.status_label.setText("Trạng thái: Đang kết nối...")
             self.status_label.setStyleSheet(f"color: {SPOTIFY_GREEN}; font-size: 10pt;")
@@ -351,13 +374,17 @@ class ClientWindow(QWidget):
                 }}
                 QPushButton:pressed {{ background-color: #C0392B; }}
             """)
-            
+
+            # Bắt đầu timer cập nhật danh sách manager
+            if hasattr(self, "manager_timer"):
+                self.manager_timer.start()
+
             self.log_message("[GUI] Dịch vụ client đã được khởi động")
-            
+
         except Exception as e:
             QMessageBox.critical(self, "Lỗi", f"Không thể khởi động dịch vụ: {e}")
             self.log_message(f"[GUI] Lỗi khởi động: {e}")
-    
+
     def _run_client_service(self):
         """Run the client service in background thread"""
         try:
@@ -372,11 +399,14 @@ class ClientWindow(QWidget):
         except Exception as e:
             self.log_message(f"[GUI] Lỗi dịch vụ: {e}")
             self.is_service_running = False
-    
+
     def stop_client_service(self):
         """Stop the client backend service"""
         try:
             self.is_service_running = False
+
+            if hasattr(self, "manager_timer"):
+                self.manager_timer.stop()
             
             if self.client_service:
                 self.client_service.stop()
