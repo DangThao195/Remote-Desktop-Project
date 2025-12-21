@@ -1091,3 +1091,26 @@
 2025-12-21 23:22:49,227 - src.server.server - INFO - Starting Auth Server in separate thread
 2025-12-21 23:22:49,228 - src.server.server - INFO - Auth Server thread started
 2025-12-21 23:22:49,228 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-21 23:26:40,673 - src.server.server - INFO - 
+================================================================================
+2025-12-21 23:26:40,674 - src.server.server - INFO - Shutdown signal received
+2025-12-21 23:26:40,674 - src.server.server - INFO - ================================================================================
+2025-12-21 23:26:40,674 - src.server.server - INFO - Stopping Main Server...
+2025-12-21 23:26:40,676 - src.server.server - INFO - Main Server stopped
+2025-12-21 23:26:40,677 - src.server.server - INFO - Server shutdown complete
+2025-12-21 23:26:45,179 - src.server.server - INFO - ================================================================================
+2025-12-21 23:26:45,180 - src.server.server - INFO - Starting Unified Server
+2025-12-21 23:26:45,180 - src.server.server - INFO - ================================================================================
+2025-12-21 23:26:45,181 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-21 23:26:45,181 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-21 23:26:45,184 - src.server.server - INFO - Main Server started successfully
+2025-12-21 23:26:45,184 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-21 23:26:45,185 - src.server.server - INFO - Auth Server thread started
+2025-12-21 23:26:45,186 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-21 23:27:30,800 - src.server.server - INFO - 
+================================================================================
+2025-12-21 23:27:30,801 - src.server.server - INFO - Shutdown signal received
+2025-12-21 23:27:30,801 - src.server.server - INFO - ================================================================================
+2025-12-21 23:27:30,802 - src.server.server - INFO - Stopping Main Server...
+2025-12-21 23:27:30,804 - src.server.server - INFO - Main Server stopped
+2025-12-21 23:27:30,804 - src.server.server - INFO - Server shutdown complete

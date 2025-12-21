@@ -366,9 +366,10 @@ class SessionManager(threading.Thread):
             # 2. Xử lý REGISTER
             elif msg.startswith(CMD_REGISTER):
                 print(f"[SessionManager] REGISTER message received: {msg}")
-                # Có 2 trường hợp:
+                # Có 3 trường hợp:
                 # A. Client đăng ký vào SessionManager (đã auth ở Auth Server): "register:client:user_id:username:role"
-                # B. Đăng ký user mới: "REGISTER:username:pass:fullname:email"
+                # B. Manager đăng ký nhanh (bỏ qua DB nếu cần): "register:manager[:username]"
+                # C. Đăng ký user mới: "register:username:pass:fullname:email"
                 parts = msg.split(":")
                 print(f"[SessionManager] REGISTER parts: {parts}, length: {len(parts)}")
                 
@@ -404,8 +405,26 @@ class SessionManager(threading.Thread):
                     # Start session outside lock to avoid deadlock
                     if pending_manager_id:
                         self._attempt_start_session(pending_manager_id, client_id)
-                    
-                # Trường hợp B: Đăng ký user mới
+
+                # Trường hợp B: Manager đăng ký nhanh (không phụ thuộc DB)
+                elif len(parts) >= 2 and parts[1] == "manager":
+                    # format: register:manager[:username]
+                    username = parts[2] if len(parts) > 2 else client_id
+                    print(f"[Auth] Fast-register manager: {username}")
+
+                    with self.lock:
+                        self.clients[client_id] = ROLE_MANAGER
+                        self.authenticated_users[client_id] = username
+                        # Khởi tạo manager_sessions nếu chưa có
+                        if client_id not in self.manager_sessions:
+                            self.manager_sessions[client_id] = {"view": [], "control": None}
+
+                    # Xác nhận và gửi danh sách client ngay
+                    self._send_control_pdu(client_id, f"{CMD_LOGIN_OK}:manager")
+                    self._send_client_list(client_id)
+                    print(f"[Auth] ✅ Manager {username} registered and client list sent")
+
+                # Trường hợp C: Đăng ký user mới vào DB
                 elif len(parts) >= 5:
                     _, user, pwd, fname, mail = parts[:5]
                     print(f"[Auth] Registering: {user}")

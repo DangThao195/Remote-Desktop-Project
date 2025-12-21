@@ -190,14 +190,17 @@ class ManagerApp:
 
     def register(self):
         print("[ManagerApp] Đăng ký với server...")
+
+        # Đăng ký nhanh để được gán role Manager ngay cả khi Auth DB gặp sự cố
+        register_msg = f"{CMD_REGISTER}manager:{self.username or self.client.manager_id}"
+        print(f"[ManagerApp] Sending REGISTER: {register_msg}")
+        self._send_control_pdu(register_msg)
+
+        # Nếu có thông tin đăng nhập, gửi thêm LOGIN để server có thể xác thực (nếu DB sẵn sàng)
         if self.username and self.password:
             login_msg = f"{CMD_LOGIN}{self.username}:{self.password}:manager"
             print(f"[ManagerApp] Sending LOGIN: {login_msg}")
             self._send_control_pdu(login_msg)
-        else:
-            register_msg = f"{CMD_REGISTER}manager"
-            print(f"[ManagerApp] Sending REGISTER: {register_msg}")
-            self._send_control_pdu(register_msg)
 
     def request_client_list(self):
         self._send_control_pdu(CMD_LIST_CLIENTS)
