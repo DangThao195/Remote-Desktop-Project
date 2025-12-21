@@ -10,8 +10,11 @@ from src.common.network.mcs_layer import MCSLite
 from src.common.network.tpkt_layer import TPKTLayer
 from src.manager.manager_constants import (
     CHANNEL_CONTROL, CHANNEL_INPUT,
-    CMD_REGISTER, CMD_LOGIN, CMD_LIST_CLIENTS, CMD_CONNECT_CLIENT, CMD_DISCONNECT,
-    CMD_CLIENT_LIST_UPDATE, CMD_SESSION_STARTED, CMD_SESSION_ENDED, CMD_ERROR
+    CMD_REGISTER, CMD_LOGIN, CMD_LIST_CLIENTS, CMD_VIEW_CLIENT, CMD_CONTROL_CLIENT, 
+    CMD_STOP_VIEW, CMD_STOP_CONTROL, CMD_DISCONNECT,
+    CMD_CLIENT_LIST_UPDATE, CMD_SESSION_STARTED, CMD_SESSION_ENDED, 
+    CMD_VIEW_STARTED, CMD_CONTROL_STARTED, CMD_VIEW_ENDED, CMD_CONTROL_ENDED,
+    CMD_ERROR
 )
 
 class ManagerApp:
@@ -112,7 +115,23 @@ class ManagerApp:
             elif msg.startswith(CMD_SESSION_STARTED):
                 if self.on_session_started:
                     self.on_session_started(msg.split(":", 1)[1])
+            elif msg.startswith(CMD_VIEW_STARTED):
+                # New: VIEW session started
+                if self.on_session_started:
+                    self.on_session_started(msg.split(":", 1)[1])
+            elif msg.startswith(CMD_CONTROL_STARTED):
+                # New: CONTROL session started
+                if self.on_session_started:
+                    self.on_session_started(msg.split(":", 1)[1])
             elif msg.startswith(CMD_SESSION_ENDED):
+                if self.on_session_ended:
+                    self.on_session_ended(msg.split(":", 1)[1])
+            elif msg.startswith(CMD_VIEW_ENDED):
+                # New: VIEW session ended
+                if self.on_session_ended:
+                    self.on_session_ended(msg.split(":", 1)[1])
+            elif msg.startswith(CMD_CONTROL_ENDED):
+                # New: CONTROL session ended
                 if self.on_session_ended:
                     self.on_session_ended(msg.split(":", 1)[1])
             elif msg.startswith(CMD_ERROR):
@@ -172,13 +191,25 @@ class ManagerApp:
     def request_client_list(self):
         self._send_control_pdu(CMD_LIST_CLIENTS)
 
-    def connect_to_client(self, client_id: str):
-        print(f"[ManagerApp] Yêu cầu kết nối tới {client_id}...")
-        self._send_control_pdu(f"{CMD_CONNECT_CLIENT}{client_id}")
+    def connect_to_client(self, client_id: str, mode: str = "control"):
+        """Connect to client with VIEW or CONTROL mode
+        mode: 'view' (1-to-many, screen only) or 'control' (1-to-1, with input)
+        """
+        print(f"[ManagerApp] Yêu cầu {mode.upper()} tới {client_id}...")
+        if mode == "view":
+            self._send_control_pdu(f"{CMD_VIEW_CLIENT}{client_id}")
+        else:  # default to control
+            self._send_control_pdu(f"{CMD_CONTROL_CLIENT}{client_id}")
 
-    def disconnect_session(self):
-        print("[ManagerApp] Yêu cầu ngắt kết nối phiên...")
-        self._send_control_pdu(CMD_DISCONNECT)
+    def disconnect_session(self, mode: str = "control"):
+        """Disconnect from current session
+        mode: 'view' or 'control'
+        """
+        print(f"[ManagerApp] Yêu cầu ngắt kết nối phiên {mode.upper()}...")
+        if mode == "view":
+            self._send_control_pdu(CMD_STOP_VIEW)
+        else:  # default to control
+            self._send_control_pdu(CMD_STOP_CONTROL)
 
     def send_input(self, event: dict):
         print(f"[ManagerApp] 📤 Gửi input event: {event.get('type')}")

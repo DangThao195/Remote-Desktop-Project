@@ -29,12 +29,19 @@ ALL_CHANNELS = (
 CMD_REGISTER = "register:"
 CMD_LOGIN = "login:"
 CMD_LIST_CLIENTS = "list_clients"
-CMD_CONNECT_CLIENT = "connect:"  # Ví dụ: "connect:client_pc_1"
-CMD_DISCONNECT = "disconnect"
+CMD_VIEW_CLIENT = "view:"  # Xem màn hình (1-to-many), ví dụ: "view:admin3"
+CMD_CONTROL_CLIENT = "control:"  # Điều khiển (1-to-1 exclusive), ví dụ: "control:admin3"
+CMD_STOP_VIEW = "stop_view"  # Dừng xem
+CMD_STOP_CONTROL = "stop_control"  # Dừng điều khiển
+CMD_DISCONNECT = "disconnect"  # Legacy, dùng stop_control thay thế
 
 # --- Lệnh Nhận về (Server -> Manager) ---
 CMD_REGISTER_OK = "register_ok"
 CMD_CLIENT_LIST_UPDATE = "client_list_update" # "client_list_update:['pc1', 'pc2']"
-CMD_SESSION_STARTED = "session_started"
-CMD_SESSION_ENDED = "session_ended"
+CMD_VIEW_STARTED = "view_started"  # Server xác nhận view session đã bắt đầu
+CMD_CONTROL_STARTED = "control_started"  # Server xác nhận control session đã bắt đầu
+CMD_VIEW_ENDED = "view_ended"  # View session kết thúc
+CMD_CONTROL_ENDED = "control_ended"  # Control session kết thúc
+CMD_SESSION_STARTED = "session_started"  # Legacy
+CMD_SESSION_ENDED = "session_ended"  # Legacy
 CMD_ERROR = "error"
