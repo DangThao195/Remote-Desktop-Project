@@ -971,3 +971,21 @@
 2025-12-21 19:02:32,832 - src.server.server - INFO - Starting Auth Server in separate thread
 2025-12-21 19:02:32,833 - src.server.server - INFO - Auth Server thread started
 2025-12-21 19:02:32,836 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-21 19:11:29,662 - src.server.server - INFO - ================================================================================
+2025-12-21 19:11:29,663 - src.server.server - INFO - Starting Unified Server
+2025-12-21 19:11:29,668 - src.server.server - INFO - ================================================================================
+2025-12-21 19:11:29,670 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-21 19:11:29,671 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-21 19:11:29,688 - src.server.server - INFO - Main Server started successfully
+2025-12-21 19:11:29,718 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-21 19:11:29,808 - src.server.server - INFO - Auth Server thread started
+2025-12-21 19:11:29,820 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-21 19:14:26,772 - src.server.server - INFO - ================================================================================
+2025-12-21 19:14:26,773 - src.server.server - INFO - Starting Unified Server
+2025-12-21 19:14:26,774 - src.server.server - INFO - ================================================================================
+2025-12-21 19:14:26,774 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-21 19:14:26,775 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-21 19:14:26,778 - src.server.server - INFO - Main Server started successfully
+2025-12-21 19:14:26,779 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-21 19:14:26,781 - src.server.server - INFO - Auth Server thread started
+2025-12-21 19:14:26,782 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.

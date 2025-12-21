@@ -241,6 +241,11 @@ class Manager(QObject):
         
         print(f"[Manager] Ngắt kết nối VIEW session với {client_id}...")
         
+        # Reset session ID NGAY LẬP TỨC
+        if self.current_session_client_id == client_id:
+            self.current_session_client_id = None
+            print(f"[Manager] Đã reset current_session_client_id = None")
+        
         # Gửi yêu cầu stop_view tới server
         try:
             self.app.disconnect_session(mode="view")
