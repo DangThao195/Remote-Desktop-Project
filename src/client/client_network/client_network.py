@@ -294,8 +294,10 @@ class ClientNetwork:
 
     def send_control_pdu(self, message: str):
         """Gửi một PDU Control tới server"""
+        print(f"[DEBUG send_control_pdu] Message: {message}")
         seq = self._next_seq()
         pdu = self.builder.build_control_pdu(seq, message.encode())
+        print(f"[DEBUG send_control_pdu] PDU built, seq={seq}, sending to channel CONTROL")
         self.send_mcs_pdu(CHANNEL_CONTROL, pdu)
 
     def register(self):

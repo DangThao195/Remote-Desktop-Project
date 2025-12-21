@@ -179,8 +179,9 @@ class Client:
         # Format: register:client:user_id:username:role
         # Server sẽ nhận diện và auto-login client này
         register_cmd = f"register:client:{self.user_id}:{self.username}:{self.role}"
+        print(f"[DEBUG] Sending register command: {register_cmd}")
         self.network.send_control_pdu(register_cmd)
-        self.logger(f"[Client] Đã gửi lệnh đăng ký")
+        self.logger(f"[Client] Đã gửi lệnh đăng ký: {register_cmd}")
 
     def stop(self):
         self.logger("[Client] Đang dừng...")
