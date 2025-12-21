@@ -365,6 +365,9 @@ class ManageClientsWindow(QWidget):
         
         self.screen_window.show()
         
+        # Track current view client
+        self.current_view_client_id = self.selected_client_id
+        
         # Gửi yêu cầu VIEW (chỉ xem, không điều khiển)
         print(f"[ManageClientsWindow] Gửi yêu cầu VIEW tới {self.selected_client_id}")
         manager.gui_view_client(self.selected_client_id)
@@ -430,6 +433,9 @@ class ManageClientsWindow(QWidget):
         
         self.control_window.show()
         
+        # Track current control client
+        self.current_control_client_id = self.selected_client_id
+        
         # Gửi yêu cầu CONTROL (exclusive 1-to-1)
         print(f"[ManageClientsWindow] Gửi yêu cầu CONTROL tới {self.selected_client_id}")
         manager.gui_control_client(self.selected_client_id)
@@ -442,11 +448,27 @@ class ManageClientsWindow(QWidget):
             manager.gui_disconnect_session(mode="control")
     
     def _on_control_close(self):
-        """Handle close button for CONTROL mode"""
+        """Control window bị đóng - cleanup CONTROL session"""
         print(f"[ManageClientsWindow] Control window bị đóng - cleanup")
-        self._on_control_disconnect()
+        
+        manager = QApplication.instance().manager_logic
+        if manager:
+            # Disconnect CONTROL session (mode="control")
+            if hasattr(self, 'current_control_client_id') and self.current_control_client_id:
+                print(f"[ManageClientsWindow] Force disconnect CONTROL session: {self.current_control_client_id}")
+                manager.gui_disconnect_session(mode="control")
+                import time
+                time.sleep(0.2)
+                self.current_control_client_id = None
+            else:
+                print(f"[ManageClientsWindow] Không có CONTROL session đang active")
+        
+        # Cleanup control window reference
         if hasattr(self, 'control_window'):
             self.control_window = None
+            print(f"[ManageClientsWindow] Đã cleanup control_window reference")
+        
+        print(f"[ManageClientsWindow] ✅ Control cleanup hoàn tất")
     
     def _on_screen_disconnect(self):
         """Handle disconnect button click - CHỈ disconnect session, GIỮ window"""
@@ -460,33 +482,28 @@ class ManageClientsWindow(QWidget):
             manager.gui_disconnect_session()
     
     def _on_screen_close(self):
-        """Handle close button (X) - Đóng window VÀ disconnect"""
+        """Handle close button (X) - Đóng window VÀ disconnect VIEW session"""
         print(f"[ManageClientsWindow] ⚠️ Screen window bị đóng - Bắt đầu cleanup...")
-        
-        # KHÔNG reset keylog buffer - vì keylog theo session của client
         
         manager = QApplication.instance().manager_logic
         if manager:
-            # Force cleanup session, không cần check current_session_client_id
-            if manager.current_session_client_id:
-                print(f"[ManageClientsWindow] Force disconnect session: {manager.current_session_client_id}")
-                manager.gui_disconnect_session()
+            # Disconnect VIEW session (không phải control)
+            if hasattr(self, 'current_view_client_id') and self.current_view_client_id:
+                print(f"[ManageClientsWindow] Force disconnect VIEW session: {self.current_view_client_id}")
+                manager.gui_disconnect_view(self.current_view_client_id)
                 # Đợi một chút để disconnect hoàn tất
                 import time
                 time.sleep(0.2)
+                self.current_view_client_id = None
             else:
-                print(f"[ManageClientsWindow] Không có session đang active, không cần disconnect")
-            
-            # Force reset current_session_client_id (trong trường hợp server chưa respond)
-            manager.current_session_client_id = None
-            print(f"[ManageClientsWindow] Đã reset current_session_client_id")
+                print(f"[ManageClientsWindow] Không có VIEW session đang active")
         
         # Cleanup screen window reference
         if hasattr(self, 'screen_window'):
             self.screen_window = None
             print(f"[ManageClientsWindow] Đã cleanup screen_window reference")
         
-        print(f"[ManageClientsWindow] ✅ Cleanup hoàn tất")
+        print(f"[ManageClientsWindow] ✅ Screen cleanup hoàn tất")
             
     def update_client_list(self, client_list: list):
         """Update the client list from manager logic"""

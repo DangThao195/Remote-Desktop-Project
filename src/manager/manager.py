@@ -233,6 +233,30 @@ class Manager(QObject):
         print(f"[Manager] Gửi yêu cầu CONTROL tới client: {client_id}")
         self.app.connect_to_client(client_id, mode="control")
 
+    def gui_disconnect_view(self, client_id):
+        """Ngắt kết nối VIEW session (chỉ xem màn hình)"""
+        if not client_id:
+            print("[Manager] Không có client_id để disconnect VIEW")
+            return
+        
+        print(f"[Manager] Ngắt kết nối VIEW session với {client_id}...")
+        
+        # Gửi yêu cầu stop_view tới server
+        try:
+            self.app.disconnect_session(mode="view")
+            print(f"[Manager] Đã gửi yêu cầu stop_view tới server")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi gửi disconnect VIEW request: {e}")
+        
+        # Request lại client list để cập nhật
+        try:
+            self.app.request_client_list()
+            print(f"[Manager] Đã request client list")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi request client list: {e}")
+        
+        print(f"[Manager] ✅ VIEW disconnect hoàn tất")
+
     def gui_disconnect_session(self, mode="control"):
         client_id = self.current_session_client_id
         if not client_id:
