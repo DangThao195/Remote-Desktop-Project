@@ -187,6 +187,7 @@ class SessionManager(threading.Thread):
     """
     def handle_pdu(self, client_id, pdu):       
         pdu_type = pdu.get("type")
+        print(f"[SessionManager handle_pdu] client_id={client_id}, pdu_type={pdu_type}")
         
         # Phân biệt keylog (từ client) vs điều khiển input (từ manager)
         if pdu_type == "input":
