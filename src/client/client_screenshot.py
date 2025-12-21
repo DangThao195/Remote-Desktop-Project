@@ -14,11 +14,17 @@ except AttributeError:
 
 
 class ClientScreenshot:
-    def __init__(self, fps=15, quality=60, max_dimension=1280, detect_delta=True):
+    def __init__(self, fps=0.2, quality=85, max_dimension=1920, detect_delta=False):
+        """
+        fps: Frame per second (0.2 = 1 frame mỗi 5 giây, 0.33 = 1 frame mỗi 3 giây)
+        quality: Chất lượng JPEG (85 = chất lượng cao)
+        max_dimension: Độ phân giải tối đa (1920 = Full HD)
+        detect_delta: Tắt delta detection để ưu tiên chất lượng
+        """
         self.fps = fps
         self.quality = quality
         self.max_dimension = max_dimension
-        self.detect_delta = False
+        self.detect_delta = detect_delta
 
         self._first_frame = True
         self._prev_image = None
@@ -26,8 +32,8 @@ class ClientScreenshot:
         self.stop = False
         self.frame_seq = 0
         self._lock = threading.Lock()
-        self.FULL_FRAME_INTERVAL = 60.0 # <--- [SỬA ĐỔI] 30 giây
-        self.last_full_frame_ts = 0.0 # <--- [SỬA ĐỔI] Thêm biến thời gian
+        self.FULL_FRAME_INTERVAL = 60.0 # Gửi full frame mỗi 60 giây
+        self.last_full_frame_ts = 0.0
 
     def _resize_if_needed(self, img):
         w, h = img.size
@@ -42,19 +48,19 @@ class ClientScreenshot:
         if img.mode != "RGB":
             img = img.convert("RGB")
         
-        # Adaptive quality: thử quality ban đầu, nếu quá lớn thì giảm
+        # Adaptive quality: tăng giới hạn size lên để giữ chất lượng cao
         current_quality = self.quality
         if adaptive:
-            img.save(bio, format="JPEG", quality=current_quality)
+            img.save(bio, format="JPEG", quality=current_quality, optimize=True)
             size_kb = len(bio.getvalue()) / 1024
             
-            # Nếu frame > 80KB, giảm quality xuống
-            if size_kb > 80:
+            # Nếu frame > 300KB, giảm quality xuống (tăng từ 80KB lên 300KB)
+            if size_kb > 300:
                 bio = io.BytesIO()
-                current_quality = max(30, current_quality - 15)  # Giảm 15 điểm nhưng không dưới 30
-                img.save(bio, format="JPEG", quality=current_quality)
+                current_quality = max(70, current_quality - 10)  # Giảm 10 điểm nhưng không dưới 70
+                img.save(bio, format="JPEG", quality=current_quality, optimize=True)
         else:
-            img.save(bio, format="JPEG", quality=current_quality)
+            img.save(bio, format="JPEG", quality=current_quality, optimize=True)
         
         return bio.getvalue()
 

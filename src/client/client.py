@@ -67,10 +67,13 @@ class Client:
             cafile=CA_FILE, 
             logger=self.logger
         )
-        self.screenshot = ClientScreenshot(fps=fps, quality=50, max_dimension=960)
+        # Screen sharing: Chất lượng cao (85), FPS thấp (0.2 = 5s/frame), Full HD
+        self.screenshot = ClientScreenshot(fps=fps, quality=85, max_dimension=1920)
         self.sender = ClientSender(self.network) # Truyền network
+        # Input control: Vẫn real-time, không phụ thuộc vào screenshot FPS
         self.input_handler = ClientInputHandler(logger=self.logger)
-        self.cursor_tracker = ClientCursorTracker(self.network, fps=30, logger=self.logger)
+        # Cursor tracking: Giảm FPS xuống 5 (đủ để thấy cursor di chuyển)
+        self.cursor_tracker = ClientCursorTracker(self.network, fps=5, logger=self.logger)
 
         self.screenshot_thread = None
         self.monitor_thread = None # [THÊM] Thread giám sát
@@ -84,7 +87,10 @@ class Client:
         self.full_frame_interval = 30 
         
         # Track session state
-        self.in_session = False 
+        self.in_session = False
+        # Tách riêng screen sharing và remote control
+        self.screen_sharing_enabled = True  # Có thể bật/tắt screen sharing
+        self.remote_control_enabled = True  # Remote control luôn bật khi in_session 
 
         # Kết nối các callback - có kiểm tra quyền
         # Remote input: chỉ admin và user mới được nhận
@@ -198,6 +204,32 @@ class Client:
         # Monitor thread là daemon nên sẽ tự tắt khi main thread tắt
             
         self.logger("[Client] Đã dừng.")
+    
+    # === Methods để bật/tắt screen sharing và remote control ===
+    def enable_screen_sharing(self):
+        """Bật chức năng chia sẻ màn hình"""
+        self.screen_sharing_enabled = True
+        self.logger("[Client] ✅ Đã BẬT screen sharing")
+    
+    def disable_screen_sharing(self):
+        """Tắt chức năng chia sẻ màn hình (chỉ tắt gửi frame, không ảnh hưởng remote control)"""
+        self.screen_sharing_enabled = False
+        self.logger("[Client] 🚫 Đã TẮT screen sharing")
+    
+    def enable_remote_control(self):
+        """Bật chức năng điều khiển từ xa"""
+        if self.permissions.can_receive_remote_input():
+            self.network.on_input_pdu = self.input_handler.handle_input_pdu
+            self.remote_control_enabled = True
+            self.logger("[Client] ✅ Đã BẬT remote control")
+        else:
+            self.logger("[Client] ⚠️ Không có quyền remote control (Role: {self.role})")
+    
+    def disable_remote_control(self):
+        """Tắt chức năng điều khiển từ xa"""
+        self.network.on_input_pdu = self._on_input_pdu_blocked
+        self.remote_control_enabled = False
+        self.logger("[Client] 🚫 Đã TẮT remote control")
 
     # --- [THÊM] HÀM GIÁM SÁT CỬA SỔ ---
     def _monitor_loop(self):
@@ -406,6 +438,12 @@ class Client:
         self.logger("[WindowTracker] Đã dừng window tracker")
 
     def _on_frame(self, width, height, jpg_bytes, bbox, img, seq, ts_ms):
+        # Kiểm tra xem screen sharing có được bật không
+        if not self.screen_sharing_enabled:
+            if seq % 100 == 0:  # Log thỉnh thoảng
+                self.logger(f"[Client] 🚫 Screen sharing bị tắt, không gửi frame")
+            return
+        
         # Tất cả các role đều được phép gửi frame (screen sharing)
         if self.in_session:
             frame_type = "FULL" if bbox is None else "RECT"
@@ -441,6 +479,19 @@ class Client:
         elif msg == "request_refresh":
             if self.in_session:
                 self.screenshot.force_full_frame()
+        
+        # === Thêm commands để bật/tắt screen sharing ===
+        elif msg == "enable_screen_sharing":
+            self.enable_screen_sharing()
+            
+        elif msg == "disable_screen_sharing":
+            self.disable_screen_sharing()
+            
+        elif msg == "enable_remote_control":
+            self.enable_remote_control()
+            
+        elif msg == "disable_remote_control":
+            self.disable_remote_control()
         
     def _on_input_pdu_blocked(self, pdu: dict):
         """Xử lý khi nhận input PDU nhưng không có quyền"""

@@ -89,6 +89,12 @@ CMD_CONNECT_CLIENT = "connect:"    # Manager yêu cầu kết nối: "connect:cl
 CMD_DISCONNECT = "disconnect"      # Manager/Client báo ngắt kết nối phiên
 CMD_SECURITY_ALERT = "security_alert" # Cấu trúc: "security_alert:Loại vi phạm|Nội dung chi tiết"
 
+# Các lệnh điều khiển screen sharing và remote control
+CMD_ENABLE_SCREEN_SHARING = "enable_screen_sharing"
+CMD_DISABLE_SCREEN_SHARING = "disable_screen_sharing"
+CMD_ENABLE_REMOTE_CONTROL = "enable_remote_control"
+CMD_DISABLE_REMOTE_CONTROL = "disable_remote_control"
+
 # Server -> Client/Manager
 CMD_REGISTER_OK = "register_ok"   # Ví dụ: "register_ok:manager"
 CMD_CLIENT_LIST_UPDATE = "client_list_update" # Gửi JSON: "client_list_update:['pc1', 'pc2']"
