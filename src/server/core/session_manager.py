@@ -205,11 +205,11 @@ class SessionManager(threading.Thread):
         role = self.clients.get(client_id)
         print(f"[SessionManager handle_pdu] role for {client_id} = {role}")
         
-        # === XỬ LÝ CLIENT/MANAGER CHƯA AUTHENTICATED (role = None) ===
-        if role is None:
+        # === XỬ LÝ CLIENT/MANAGER CHƯA AUTHENTICATED (role = None or ROLE_UNKNOWN) ===
+        if role is None or role == ROLE_UNKNOWN:
             # Chỉ xử lý control PDU cho authentication (login, register)
             if pdu_type == "control":
-                print(f"[SessionManager] Unauthenticated client {client_id} sends control PDU")
+                print(f"[SessionManager] Unauthenticated client {client_id} (role={role}) sends control PDU")
                 print(f"[SessionManager] Putting PDU into queue for processing")
                 self.pdu_queue.put((client_id, pdu))
                 print(f"[SessionManager] PDU queued successfully")
