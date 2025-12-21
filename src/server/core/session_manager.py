@@ -682,11 +682,21 @@ class SessionManager(threading.Thread):
                 if client_id not in self.manager_sessions[manager_id]["view"]:
                     self.manager_sessions[manager_id]["view"].append(client_id)
                 
-                # Thông báo thành công
-                self._send_control_pdu(manager_id, f"{CMD_VIEW_STARTED}:{client_id}")
-                self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:{manager_id}")
-                print(f"[ViewSession] Manager {manager_id} started viewing {client_id}")
-                return True
+                print(f"[ViewSession] DEBUG: About to send view_started commands...")
+                
+                try:
+                    # Thông báo thành công
+                    print(f"[ViewSession] DEBUG: Sending view_started to manager {manager_id}")
+                    self._send_control_pdu(manager_id, f"{CMD_VIEW_STARTED}:{client_id}")
+                    print(f"[ViewSession] DEBUG: Sending view_started to client {client_id}")
+                    self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:{manager_id}")
+                    print(f"[ViewSession] Manager {manager_id} started viewing {client_id}")
+                    return True
+                except Exception as e:
+                    print(f"[ViewSession] ERROR sending view_started: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
             else:
                 self._send_control_pdu(manager_id, f"{CMD_ERROR}:Đã đang view client này")
                 return False
@@ -753,13 +763,24 @@ class SessionManager(threading.Thread):
                 self.manager_sessions[manager_id] = {"view": [], "control": None}
             self.manager_sessions[manager_id]["control"] = client_id
         
-        # Thông báo thành công
-        self._send_control_pdu(manager_id, f"{CMD_CONTROL_STARTED}:{client_id}")
-        self._send_control_pdu(client_id, f"{CMD_CONTROL_STARTED}:{manager_id}")
+        print(f"[ControlSession] DEBUG: About to send control_started commands...")
         
-        # Cập nhật danh sách client (client đang bị control)
-        self._broadcast_client_list()
-        return True
+        try:
+            # Thông báo thành công
+            print(f"[ControlSession] DEBUG: Sending control_started to manager {manager_id}")
+            self._send_control_pdu(manager_id, f"{CMD_CONTROL_STARTED}:{client_id}")
+            print(f"[ControlSession] DEBUG: Sending control_started to client {client_id}")
+            self._send_control_pdu(client_id, f"{CMD_CONTROL_STARTED}:{manager_id}")
+            print(f"[ControlSession] Successfully notified both parties")
+            
+            # Cập nhật danh sách client (client đang bị control)
+            self._broadcast_client_list()
+            return True
+        except Exception as e:
+            print(f"[ControlSession] ERROR sending control_started: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def _stop_control_session(self, manager_id):
         """
