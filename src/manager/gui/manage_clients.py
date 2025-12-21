@@ -190,6 +190,7 @@ class ManageClientsWindow(QWidget):
 
         # Connect signals
         self.buttons["Screen"].clicked.connect(self.view_screen)
+        self.buttons["Control"].clicked.connect(self.control_screen)
         self.buttons["Keylogger"].clicked.connect(self.view_keylogger)
         self.buttons["Security Alerts"].clicked.connect(self.view_security_alerts)
 
@@ -364,15 +365,88 @@ class ManageClientsWindow(QWidget):
         
         self.screen_window.show()
         
-        # Gửi yêu cầu connect nếu chưa có session
-        if not manager.current_session_client_id:
-            print(f"[ManageClientsWindow] Gửi yêu cầu connect tới {self.selected_client_id}")
-            manager.gui_connect_to_client(self.selected_client_id)
-        else:
-            print(f"[ManageClientsWindow] Đã có session với {manager.current_session_client_id}")
+        # Gửi yêu cầu VIEW (chỉ xem, không điều khiển)
+        print(f"[ManageClientsWindow] Gửi yêu cầu VIEW tới {self.selected_client_id}")
+        manager.gui_view_client(self.selected_client_id)
         
         # QUAN TRỌNG: Không đóng ManageClientsWindow để giữ kết nối
         # self.close()  # KHÔNG được đóng window này!
+    
+    def control_screen(self):
+        """Mở màn hình điều khiển client (CONTROL mode - 1-to-1 exclusive)"""
+        if not self.selected_client_id:
+            print(f"[ManageClientsWindow] Chưa chọn client nào!")
+            QMessageBox.warning(self, "No Client Selected", "Please select a client first!")
+            return
+        
+        print(f"[ManageClientsWindow] Mở CONTROL mode cho client: {self.selected_client_id}")
+        
+        # Lấy manager logic
+        manager = QApplication.instance().manager_logic
+        if not manager:
+            print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
+            return
+        
+        # Kiểm tra client có trong danh sách từ server không
+        print(f"[ManageClientsWindow] Danh sách client từ server: {manager.client_list}")
+        client_ids = [c['id'] for c in manager.client_list]
+        if self.selected_client_id not in client_ids:
+            print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách!")
+            QMessageBox.warning(self, "Client Not Available", 
+                              f"Client '{self.selected_client_id}' is not available.")
+            return
+        
+        # Kiểm tra client có đang bị control bởi người khác không
+        selected_client = next((c for c in manager.client_list if c['id'] == self.selected_client_id), None)
+        if selected_client and selected_client.get('is_controlled', False):
+            QMessageBox.warning(self, "Client Busy", 
+                              f"Client '{self.selected_client_id}' is being controlled by another manager!")
+            return
+        
+        # Nếu đã có control window, chỉ hiện lại
+        if hasattr(self, 'control_window') and self.control_window:
+            print(f"[ManageClientsWindow] Control window đã tồn tại, hiện lại")
+            self.control_window.show()
+            self.control_window.raise_()
+            self.control_window.activateWindow()
+            return
+        
+        # Tạo window mới
+        print(f"[ManageClientsWindow] Tạo control window mới cho {self.selected_client_id}")
+        from src.manager.gui.manage_screen import ManageScreenWindow
+        self.control_window = ManageScreenWindow(self.selected_client_id, mode="control")
+        
+        # Connect signals
+        print(f"[ManageClientsWindow] Kết nối signals với manager logic")
+        self.control_window.disconnect_requested.connect(self._on_control_disconnect)
+        self.control_window.close_requested.connect(self._on_control_close)
+        self.control_window.input_event_generated.connect(manager._on_gui_input)
+        
+        manager.session_started.connect(self.control_window.set_session_started)
+        manager.session_ended.connect(self.control_window.set_session_ended)
+        manager.video_pdu_received.connect(self.control_window.update_video_frame)
+        manager.cursor_pdu_received.connect(self.control_window.update_cursor_pos)
+        manager.error_received.connect(self.control_window.show_error)
+        
+        self.control_window.show()
+        
+        # Gửi yêu cầu CONTROL (exclusive 1-to-1)
+        print(f"[ManageClientsWindow] Gửi yêu cầu CONTROL tới {self.selected_client_id}")
+        manager.gui_control_client(self.selected_client_id)
+    
+    def _on_control_disconnect(self):
+        """Handle disconnect button for CONTROL mode"""
+        print(f"[ManageClientsWindow] Control window yêu cầu disconnect")
+        manager = QApplication.instance().manager_logic
+        if manager:
+            manager.gui_disconnect_session(mode="control")
+    
+    def _on_control_close(self):
+        """Handle close button for CONTROL mode"""
+        print(f"[ManageClientsWindow] Control window bị đóng - cleanup")
+        self._on_control_disconnect()
+        if hasattr(self, 'control_window'):
+            self.control_window = None
     
     def _on_screen_disconnect(self):
         """Handle disconnect button click - CHỈ disconnect session, GIỮ window"""
