@@ -249,6 +249,13 @@ class ManageScreenWindow(QWidget):
                 }
                 
         elif event.type() == QEvent.Type.MouseMove:
+            # Throttle mouse move để không spam server
+            import time
+            current_time = time.time()
+            if current_time - self.last_mouse_sent_time < 0.05:  # Max 20 events/s
+                return True  # Bỏ qua event này
+            self.last_mouse_sent_time = current_time
+            
             event_dict = {
                 "type": "mouse_move",
                 "x_norm": x_norm,

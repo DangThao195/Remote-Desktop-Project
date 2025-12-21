@@ -10,7 +10,7 @@ class ServerBroadcaster(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True, name="Broadcaster")
         self.running = True
-        self.queue = Queue(maxsize=1024) # Giới hạn queue để tránh OOM
+        self.queue = Queue(maxsize=4096) # Tăng queue size để xử lý input events
         self.clients = {}  # client_id -> ssl_socket
         self.lock = threading.Lock()
 

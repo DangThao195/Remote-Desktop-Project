@@ -47,6 +47,25 @@ class ClientConnection:
     def read_field(self):
         (length,) = struct.unpack("!I", self.recv_exact(4))
         return self.recv_exact(length)
+    
+    def close(self):
+        """Đóng kết nối"""
+        try:
+            self.sock.close()
+        except:
+            pass
+    
+    def reconnect(self):
+        """Đóng và mở lại kết nối để đảm bảo socket sạch"""
+        self.close()
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.host, self.port))
+            print(f"[+] Kết nối lại tới server {self.host}:{self.port}")
+            return True
+        except Exception as e:
+            print(f"[!] Lỗi khi kết nối lại: {e}")
+            return False
 
     # ----------------- Các API -----------------
     def client_login(self, username, password):
@@ -60,16 +79,32 @@ class ClientConnection:
         return None
 
     def client_profile(self, token):
-        self.send_message(2, token)
-        reply = struct.unpack("!B", self.recv_exact(1))[0]
-        if reply != 1:
-            print("[<] Lấy profile thất bại")
-            return None
+        try:
+            self.send_message(2, token)
+            reply = struct.unpack("!B", self.recv_exact(1))[0]
+            if reply != 1:
+                print("[<] Lấy profile thất bại")
+                return None
 
-        (length,) = struct.unpack("!I", self.recv_exact(4))
-        json_data = self.recv_exact(length)
-        data = json.loads(json_data.decode("utf-8"))
-        return self.convert_datetimes(data)
+            (length,) = struct.unpack("!I", self.recv_exact(4))
+            json_data = self.recv_exact(length)
+            
+            # Debug: in ra raw data để kiểm tra
+            print(f"[DEBUG] JSON data length: {length}, actual: {len(json_data)}")
+            
+            data = json.loads(json_data.decode("utf-8"))
+            return self.convert_datetimes(data)
+        except json.JSONDecodeError as e:
+            print(f"[!] Lỗi parse JSON: {e}")
+            print(f"[!] Raw data: {json_data[:100]}")  # In 100 ký tự đầu
+            # Thử reconnect và retry
+            print("[*] Thử kết nối lại...")
+            if self.reconnect():
+                return self.client_profile(token)
+            return None
+        except Exception as e:
+            print(f"[!] Lỗi client_profile: {e}")
+            return None
 
     def client_logout(self, token):
         self.send_message(3, token)
