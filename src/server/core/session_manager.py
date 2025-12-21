@@ -522,6 +522,10 @@ class SessionManager(threading.Thread):
     def _get_available_clients(self):
         available = []
         with self.lock:
+            print(f"[_get_available_clients] Total clients: {len(self.clients)}")
+            print(f"[_get_available_clients] Clients dict: {self.clients}")
+            print(f"[_get_available_clients] Authenticated users: {self.authenticated_users}")
+            
             for cid, role in self.clients.items():
                 # Tất cả client đều hiển thị, kèm trạng thái
                 if role == ROLE_CLIENT:
@@ -542,13 +546,17 @@ class SessionManager(threading.Thread):
                         viewer_count = self.view_sessions[cid].get_viewer_count()
                     
                     # Dùng username làm 'id' để Manager có thể gửi view:username hoặc control:username
-                    available.append({
+                    client_info = {
                         "id": username, 
                         "name": username, 
                         "ip": ip,
                         "is_controlled": is_controlled,
                         "viewer_count": viewer_count
-                    })
+                    }
+                    print(f"[_get_available_clients] Adding client: {client_info}")
+                    available.append(client_info)
+        
+        print(f"[_get_available_clients] Final available list: {available}")
         return available
 
     # Gửi danh sách Client cho 1 Manager cụ thể
