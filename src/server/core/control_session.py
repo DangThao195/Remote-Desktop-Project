@@ -56,7 +56,8 @@ class ControlSession(threading.Thread):
         try:
             while self.running:
                 try:
-                    from_id, pdu = self.pdu_queue.get(timeout=0.5)
+                    # Giảm timeout xuống 0.1s để responsive hơn
+                    from_id, pdu = self.pdu_queue.get(timeout=0.1)
                 except Empty:
                     continue
                 
