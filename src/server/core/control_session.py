@@ -94,6 +94,7 @@ class ControlSession(threading.Thread):
                     
                     if ptype == "input":
                         # Input control (mouse/keyboard)
+                        # print(f"[ControlSession] 🎮 Forwarding input from manager to {target_id}")
                         mcs_frame = MCSLite.build(CHANNEL_INPUT, raw_payload)
                     elif ptype == "control":
                         # Control command

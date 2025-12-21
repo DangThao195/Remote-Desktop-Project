@@ -855,7 +855,11 @@ class SessionManager(threading.Thread):
         LOGIC MỚI:
         - Chỉ TẮT quyền điều khiển
         - KHÔNG tắt ViewSession → Manager VẪN XEM màn hình
+        - Direct cleanup thay vì đợi callback
         """
+        client_id = None
+        control_session = None
+        
         with self.lock:
             if manager_id not in self.manager_sessions:
                 return
@@ -864,13 +868,28 @@ class SessionManager(threading.Thread):
             if not client_id:
                 return
             
-            # Tìm và dừng ControlSession
+            # Lấy reference trước khi xóa
             if client_id in self.control_sessions:
                 control_session = self.control_sessions[client_id]
-                control_session.stop()
-                # _on_control_session_done sẽ được gọi tự động
+                # DIRECT CLEANUP - xóa ngay lập tức
+                del self.control_sessions[client_id]
+                print(f"[ControlSession] ✅ Deleted ControlSession for {client_id}")
+            
+            # Cập nhật manager_sessions
+            self.manager_sessions[manager_id]["control"] = None
         
-        print(f"[ControlSession] Stopped control for manager {manager_id}, but VIEW session remains active")
+        # Dừng thread bên ngoài lock
+        if control_session:
+            control_session.stop()
+        
+        # Gửi thông báo bên ngoài lock
+        if client_id:
+            self._send_control_pdu(manager_id, f"{CMD_CONTROL_STOPPED}:{client_id}")
+            self._send_control_pdu(client_id, f"{CMD_CONTROL_STOPPED}:{manager_id}")
+            print(f"[ControlSession] Stopped control for manager {manager_id}, but VIEW session remains active")
+            
+            # Cập nhật danh sách client
+            self._broadcast_client_list()
     
     def _on_control_session_done(self, control_session, reason):
         """
