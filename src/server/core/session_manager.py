@@ -362,20 +362,23 @@ class SessionManager(threading.Thread):
 
             # 2. Xử lý REGISTER
             elif msg.startswith(CMD_REGISTER):
+                print(f"[SessionManager] REGISTER message received: {msg}")
                 # Có 2 trường hợp:
                 # A. Client đăng ký vào SessionManager (đã auth ở Auth Server): "register:client:user_id:username:role"
                 # B. Đăng ký user mới: "REGISTER:username:pass:fullname:email"
                 parts = msg.split(":")
+                print(f"[SessionManager] REGISTER parts: {parts}, length: {len(parts)}")
                 
                 # Trường hợp A: Client đăng ký (đã authenticated)
                 if len(parts) >= 4 and parts[1] == "client":
                     _, _, user_id, username = parts[:4]
                     role = parts[4] if len(parts) > 4 else ROLE_CLIENT
-                    print(f"[Auth] Client auto-login: {username} (already authenticated)")
+                    print(f"[Auth] Client auto-login: {username} (already authenticated), setting role to {role}")
                     
                     with self.lock:
                         self.clients[client_id] = ROLE_CLIENT
                         self.authenticated_users[client_id] = username
+                        print(f"[Auth] ✅ Registered client_id={client_id}, username={username}, role={ROLE_CLIENT}")
                     
                     self._send_control_pdu(client_id, f"{CMD_LOGIN_OK}:client")
                     self._broadcast_client_list()
