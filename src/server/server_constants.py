@@ -85,8 +85,12 @@ CMD_LOGIN_OK = "login_ok"
 CMD_LOGIN_FAIL = "login_fail"
 
 CMD_LIST_CLIENTS = "list_clients"  # Manager yêu cầu danh sách client
-CMD_CONNECT_CLIENT = "connect:"    # Manager yêu cầu kết nối: "connect:client_pc_1"
-CMD_DISCONNECT = "disconnect"      # Manager/Client báo ngắt kết nối phiên
+CMD_CONNECT_CLIENT = "connect:"    # Manager yêu cầu kết nối: "connect:client_pc_1" (deprecated)
+CMD_VIEW_CLIENT = "view:"          # Manager yêu cầu VIEW (chỉ xem): "view:client_pc_1"
+CMD_CONTROL_CLIENT = "control:"    # Manager yêu cầu CONTROL (điều khiển 1-1): "control:client_pc_1"
+CMD_STOP_VIEW = "stop_view"        # Manager dừng view
+CMD_STOP_CONTROL = "stop_control"  # Manager dừng control
+CMD_DISCONNECT = "disconnect"      # Manager/Client báo ngắt kết nối phiên (deprecated)
 CMD_SECURITY_ALERT = "security_alert" # Cấu trúc: "security_alert:Loại vi phạm|Nội dung chi tiết"
 
 # Các lệnh điều khiển screen sharing và remote control
@@ -98,6 +102,11 @@ CMD_DISABLE_REMOTE_CONTROL = "disable_remote_control"
 # Server -> Client/Manager
 CMD_REGISTER_OK = "register_ok"   # Ví dụ: "register_ok:manager"
 CMD_CLIENT_LIST_UPDATE = "client_list_update" # Gửi JSON: "client_list_update:['pc1', 'pc2']"
-CMD_SESSION_STARTED = "session_started"       # Báo phiên bắt đầu: "session_started:client_pc_1"
-CMD_SESSION_ENDED = "session_ended"           # Báo phiên kết thúc: "session_ended:client_pc_1"
+CMD_SESSION_STARTED = "session_started"       # Báo phiên bắt đầu: "session_started:client_pc_1" (deprecated)
+CMD_VIEW_STARTED = "view_started"             # Báo view bắt đầu: "view_started:client_pc_1"
+CMD_VIEW_STOPPED = "view_stopped"             # Báo view kết thúc: "view_stopped:client_pc_1"
+CMD_CONTROL_STARTED = "control_started"       # Báo control bắt đầu: "control_started:client_pc_1"
+CMD_CONTROL_STOPPED = "control_stopped"       # Báo control kết thúc: "control_stopped:client_pc_1"
+CMD_CONTROL_DENIED = "control_denied"         # Báo control bị từ chối (đã có người khác control)
+CMD_SESSION_ENDED = "session_ended"           # Báo phiên kết thúc: "session_ended:client_pc_1" (deprecated)
 CMD_ERROR = "error"                           # Báo lỗi: "error:Client not found"

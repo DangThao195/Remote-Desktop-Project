@@ -19,6 +19,8 @@ from src.server.server_constants import (
     CMD_REGISTER, CMD_REGISTER_OK, 
     CMD_LIST_CLIENTS, CMD_CLIENT_LIST_UPDATE,
     CMD_CONNECT_CLIENT, CMD_SESSION_STARTED, CMD_SESSION_ENDED,
+    CMD_VIEW_CLIENT, CMD_CONTROL_CLIENT, CMD_STOP_VIEW, CMD_STOP_CONTROL,
+    CMD_VIEW_STARTED, CMD_VIEW_STOPPED, CMD_CONTROL_STARTED, CMD_CONTROL_STOPPED, CMD_CONTROL_DENIED,
     CMD_ERROR, CHANNEL_CONTROL, CHANNEL_INPUT
 )
 from src.server.core.auth_handler import (
@@ -30,6 +32,10 @@ from src.server.core.session import ServerSession
 
 from src.common.network.pdu_builder import PDUBuilder
 from src.common.network.mcs_layer import MCSLite
+
+# Import ViewSession và ControlSession
+from src.server.core.view_session import ViewSession
+from src.server.core.control_session import ControlSession
 
 # Import database cho keylog
 try:
@@ -55,7 +61,15 @@ class SessionManager(threading.Thread):
         self.clients = {}           # { client_id -> role }
         self.authenticated_users = {} # { client_id -> username } (Chỉ user đã login thành công)
         
-        # Quản lý Phiên (Remote Desktop)
+        # Quản lý Phiên mới: Tách VIEW và CONTROL
+        # VIEW: 1 client có thể có nhiều viewers (1-nhiều)
+        self.view_sessions = {}      # { client_id -> ViewSession }
+        # CONTROL: 1 client chỉ có 1 controller (1-1 exclusive)
+        self.control_sessions = {}   # { client_id -> ControlSession }
+        # Mapping để biết manager nào đang trong session nào
+        self.manager_sessions = {}   # { manager_id -> {"view": [client_ids], "control": client_id} }
+        
+        # Legacy support (deprecated)
         self.client_session_map = {} # { client_id -> ServerSession object }
         self.active_sessions = {}    # { session_id -> ServerSession object }
         
@@ -99,20 +113,54 @@ class SessionManager(threading.Thread):
         print(f"[Network] Disconnected: {client_id}")
         
         username = None
-        session = None
         role = ROLE_UNKNOWN
 
         # 1. Xử lý Logout DB & Xóa khỏi RAM
         with self.lock:
             role = self.clients.pop(client_id, ROLE_UNKNOWN)
             username = self.authenticated_users.pop(client_id, None)
-            session = self.client_session_map.pop(client_id, None)
 
         if username:
             print(f"[Auth] User {username} logged out implicitly.")
-            # auth_log_out(session_id) # Nếu bạn muốn update DB LastLogin thì gọi ở đây
-
-        # 2. Nếu đang trong phiên Remote, phải dừng phiên đó
+        
+        # 2. Cleanup VIEW và CONTROL sessions
+        if role == ROLE_MANAGER:
+            # Manager disconnect → Dừng tất cả view và control sessions của manager
+            self._stop_view_session(client_id)
+            self._stop_control_session(client_id)
+            
+            # Cleanup manager_sessions
+            with self.lock:
+                self.manager_sessions.pop(client_id, None)
+        
+        elif role == ROLE_CLIENT:
+            # Client disconnect → Dừng tất cả sessions liên quan đến client
+            with self.lock:
+                # Dừng view session
+                if client_id in self.view_sessions:
+                    view_session = self.view_sessions[client_id]
+                    viewers = list(view_session.viewers)
+                    view_session.stop()
+                    del self.view_sessions[client_id]
+                    
+                    # Thông báo cho tất cả viewers
+                    for viewer_id in viewers:
+                        self._send_control_pdu(viewer_id, f"{CMD_VIEW_STOPPED}:{client_id}")
+                        if viewer_id in self.manager_sessions:
+                            if client_id in self.manager_sessions[viewer_id]["view"]:
+                                self.manager_sessions[viewer_id]["view"].remove(client_id)
+                
+                # Dừng control session
+                if client_id in self.control_sessions:
+                    control_session = self.control_sessions[client_id]
+                    manager_id = control_session.manager_id
+                    control_session.stop()
+                    # _on_control_session_done sẽ được gọi tự động
+        
+        # 3. Legacy: Dừng old-style session (nếu có)
+        with self.lock:
+            session = self.client_session_map.pop(client_id, None)
+        
         if session:
             print(f"[Session] Dừng phiên {session.session_id} do một bên ngắt kết nối.")
             session.stop()
@@ -150,22 +198,78 @@ class SessionManager(threading.Thread):
             if is_keylog:
                 self._handle_input_pdu(client_id, pdu)
                 return
-            # Nếu là input điều khiển từ manager → forward tới client qua session
-            # (để tiếp tục xử lý bên dưới)
+            # Nếu là input điều khiển từ manager → forward tới client qua control session
         
-        # Xử lý các loại PDU khác
-        session = None
-        with self.lock:
-            session = self.client_session_map.get(client_id)
+        # === XỬ LÝ PDU TỪ CLIENT ===
+        role = self.clients.get(client_id)
+        if role == ROLE_CLIENT:
+            # Client gửi video/cursor/control
+            if pdu_type in ("full", "rect", "cursor"):
+                # Video/Cursor frames → Broadcast tới viewers VÀ controller
+                raw_payload = pdu.get("_raw_payload")
+                if not raw_payload:
+                    return
+                
+                with self.lock:
+                    # 1. Broadcast tới tất cả viewers (nếu có)
+                    if client_id in self.view_sessions:
+                        view_session = self.view_sessions[client_id]
+                        view_session.broadcast_frame(pdu_type, raw_payload)
+                    
+                    # 2. Gửi tới controller (nếu có)
+                    if client_id in self.control_sessions:
+                        control_session = self.control_sessions[client_id]
+                        control_session.enqueue_pdu(client_id, pdu)
             
-        if session:
-            # User đang bận remote -> Chuyển dữ liệu vào Session
-            session.enqueue_pdu(client_id, pdu)
-        else:
-            # User rảnh -> Đây là lệnh Control
-            # Đẩy vào Queue để thread chính xử lý tuần tự, tránh race condition DB
-            if pdu_type == "control":
-                self.pdu_queue.put((client_id, pdu))
+            elif pdu_type == "control":
+                # Control message → Gửi tới controller (nếu có)
+                with self.lock:
+                    if client_id in self.control_sessions:
+                        control_session = self.control_sessions[client_id]
+                        control_session.enqueue_pdu(client_id, pdu)
+                    else:
+                        # Không có session, xử lý như control command
+                        self.pdu_queue.put((client_id, pdu))
+            
+            else:
+                # File transfer, etc. → Xử lý qua control session
+                with self.lock:
+                    if client_id in self.control_sessions:
+                        control_session = self.control_sessions[client_id]
+                        control_session.enqueue_pdu(client_id, pdu)
+        
+        # === XỬ LÝ PDU TỪ MANAGER ===
+        elif role == ROLE_MANAGER:
+            # Manager gửi input control → Forward tới client qua control session
+            if pdu_type == "input":
+                with self.lock:
+                    if client_id in self.manager_sessions and self.manager_sessions[client_id]["control"]:
+                        target_client_id = self.manager_sessions[client_id]["control"]
+                        if target_client_id in self.control_sessions:
+                            control_session = self.control_sessions[target_client_id]
+                            control_session.enqueue_pdu(client_id, pdu)
+            
+            elif pdu_type == "control":
+                # Control command
+                with self.lock:
+                    # Nếu đang trong control session, forward
+                    if client_id in self.manager_sessions and self.manager_sessions[client_id]["control"]:
+                        target_client_id = self.manager_sessions[client_id]["control"]
+                        if target_client_id in self.control_sessions:
+                            control_session = self.control_sessions[target_client_id]
+                            control_session.enqueue_pdu(client_id, pdu)
+                    else:
+                        # Không trong session, xử lý như command
+                        self.pdu_queue.put((client_id, pdu))
+            
+            else:
+                # File transfer, etc.
+                with self.lock:
+                    if client_id in self.manager_sessions and self.manager_sessions[client_id]["control"]:
+                        target_client_id = self.manager_sessions[client_id]["control"]
+                        if target_client_id in self.control_sessions:
+                            control_session = self.control_sessions[target_client_id]
+                            control_session.enqueue_pdu(client_id, pdu)
 
     # =========================================================================
     # VÒNG LẶP CHÍNH (XỬ LÝ CONTROL PDU)
@@ -267,7 +371,69 @@ class SessionManager(threading.Thread):
                 if self.clients.get(client_id) == ROLE_MANAGER:
                     self._send_client_list(client_id)
 
-            # 4. Xử lý Yêu cầu Kết nối (Manager -> Client)
+            # 4. Xử lý Yêu cầu VIEW (Manager -> Client)
+            elif msg.startswith("view:"):
+                # Format: "view:target_client_username"
+                if self.clients.get(client_id) != ROLE_MANAGER:
+                    self._send_control_pdu(client_id, f"{CMD_ERROR}:Bạn không có quyền Manager")
+                    return
+                
+                try:
+                    target_username = msg.split(":", 1)[1].strip()
+                    
+                    # Tìm socket_id của client từ username
+                    target_client_id = None
+                    with self.lock:
+                        for cid, username in self.authenticated_users.items():
+                            if username == target_username and self.clients.get(cid) == ROLE_CLIENT:
+                                target_client_id = cid
+                                break
+                    
+                    if target_client_id:
+                        self._start_view_session(manager_id=client_id, client_id=target_client_id)
+                    else:
+                        self._send_control_pdu(client_id, f"{CMD_ERROR}:Client {target_username} không online")
+                except Exception as e:
+                    print(f"[SessionManager] Error handling VIEW: {e}")
+            
+            # 5. Xử lý Yêu cầu CONTROL (Manager -> Client)
+            elif msg.startswith("control:"):
+                # Format: "control:target_client_username"
+                if self.clients.get(client_id) != ROLE_MANAGER:
+                    self._send_control_pdu(client_id, f"{CMD_ERROR}:Bạn không có quyền Manager")
+                    return
+                
+                try:
+                    target_username = msg.split(":", 1)[1].strip()
+                    
+                    # Tìm socket_id của client từ username
+                    target_client_id = None
+                    with self.lock:
+                        for cid, username in self.authenticated_users.items():
+                            if username == target_username and self.clients.get(cid) == ROLE_CLIENT:
+                                target_client_id = cid
+                                break
+                    
+                    if target_client_id:
+                        self._start_control_session(manager_id=client_id, client_id=target_client_id)
+                    else:
+                        self._send_control_pdu(client_id, f"{CMD_ERROR}:Client {target_username} không online")
+                except Exception as e:
+                    print(f"[SessionManager] Error handling CONTROL: {e}")
+            
+            # 6. Xử lý STOP VIEW
+            elif msg == "stop_view":
+                if self.clients.get(client_id) != ROLE_MANAGER:
+                    return
+                self._stop_view_session(manager_id=client_id)
+            
+            # 7. Xử lý STOP CONTROL
+            elif msg == "stop_control":
+                if self.clients.get(client_id) != ROLE_MANAGER:
+                    return
+                self._stop_control_session(manager_id=client_id)
+            
+            # 8. Xử lý Yêu cầu Kết nối (Manager -> Client) - DEPRECATED, dùng view/control
             elif msg.startswith(CMD_CONNECT_CLIENT):
                 # Format: "CONNECT:target_client_id"
                 # Check quyền Manager
@@ -352,13 +518,13 @@ class SessionManager(threading.Thread):
         # Client rảnh trở lại -> Cập nhật list
         self._broadcast_client_list()
 
-    # Lấy danh sách các Client đang rảnh
+    # Lấy danh sách các Client (cả rảnh và bận)
     def _get_available_clients(self):
         available = []
         with self.lock:
             for cid, role in self.clients.items():
-                # Điều kiện: Là client và chưa vào Session nào và đã login 
-                if role == ROLE_CLIENT and cid not in self.client_session_map:
+                # Tất cả client đều hiển thị, kèm trạng thái
+                if role == ROLE_CLIENT:
                     username = self.authenticated_users.get(cid, "Unknown")
                     # Lấy IP từ broadcaster
                     ip = "Unknown"
@@ -367,10 +533,22 @@ class SessionManager(threading.Thread):
                         if sock:
                             ip = sock.getpeername()[0]
                     except Exception as e:
-                        # Không lấy được IP thì thôi
                         pass
-                    # Dùng username làm 'id' để Manager có thể gửi CONNECT:username
-                    available.append({"id": username, "name": username, "ip": ip})
+                    
+                    # Kiểm tra trạng thái
+                    is_controlled = cid in self.control_sessions
+                    viewer_count = 0
+                    if cid in self.view_sessions:
+                        viewer_count = self.view_sessions[cid].get_viewer_count()
+                    
+                    # Dùng username làm 'id' để Manager có thể gửi view:username hoặc control:username
+                    available.append({
+                        "id": username, 
+                        "name": username, 
+                        "ip": ip,
+                        "is_controlled": is_controlled,
+                        "viewer_count": viewer_count
+                    })
         return available
 
     # Gửi danh sách Client cho 1 Manager cụ thể
@@ -450,3 +628,151 @@ class SessionManager(threading.Thread):
             print(f"[SessionManager] ❌ Lỗi xử lý INPUT PDU: {e}")
             import traceback
             traceback.print_exc()
+    
+    # =========================================================================
+    # VIEW & CONTROL SESSION METHODS (NEW)
+    # =========================================================================
+    
+    def _start_view_session(self, manager_id, client_id):
+        """
+        Bắt đầu VIEW session: Manager xem màn hình Client (không điều khiển)
+        Nhiều manager có thể view cùng 1 client
+        """
+        with self.lock:
+            # Kiểm tra client có tồn tại không
+            if client_id not in self.clients:
+                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Client không tồn tại")
+                return False
+            
+            # Lấy hoặc tạo ViewSession cho client này
+            if client_id not in self.view_sessions:
+                self.view_sessions[client_id] = ViewSession(client_id, self.broadcaster)
+            
+            view_session = self.view_sessions[client_id]
+            
+            # Thêm manager vào danh sách viewers
+            if view_session.add_viewer(manager_id):
+                # Cập nhật manager_sessions
+                if manager_id not in self.manager_sessions:
+                    self.manager_sessions[manager_id] = {"view": [], "control": None}
+                if client_id not in self.manager_sessions[manager_id]["view"]:
+                    self.manager_sessions[manager_id]["view"].append(client_id)
+                
+                # Thông báo thành công
+                self._send_control_pdu(manager_id, f"{CMD_VIEW_STARTED}:{client_id}")
+                self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:{manager_id}")
+                print(f"[ViewSession] Manager {manager_id} started viewing {client_id}")
+                return True
+            else:
+                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Đã đang view client này")
+                return False
+    
+    def _stop_view_session(self, manager_id):
+        """
+        Dừng tất cả VIEW sessions của manager
+        """
+        with self.lock:
+            if manager_id not in self.manager_sessions:
+                return
+            
+            viewing_clients = self.manager_sessions[manager_id]["view"].copy()
+            
+            for client_id in viewing_clients:
+                if client_id in self.view_sessions:
+                    view_session = self.view_sessions[client_id]
+                    is_empty = view_session.remove_viewer(manager_id)
+                    
+                    # Nếu không còn viewer nào, xóa ViewSession
+                    if is_empty:
+                        del self.view_sessions[client_id]
+                        print(f"[ViewSession] Deleted ViewSession for {client_id} (no viewers)")
+                    
+                    # Thông báo
+                    self._send_control_pdu(manager_id, f"{CMD_VIEW_STOPPED}:{client_id}")
+                    self._send_control_pdu(client_id, f"{CMD_VIEW_STOPPED}:{manager_id}")
+            
+            # Clear danh sách view của manager
+            self.manager_sessions[manager_id]["view"] = []
+    
+    def _start_control_session(self, manager_id, client_id):
+        """
+        Bắt đầu CONTROL session: Manager điều khiển Client (1-1 exclusive)
+        Chỉ 1 manager có thể control 1 client tại 1 thời điểm
+        """
+        with self.lock:
+            # Kiểm tra client có tồn tại không
+            if client_id not in self.clients:
+                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Client không tồn tại")
+                return False
+            
+            # Kiểm tra client đã bị control bởi người khác chưa
+            if client_id in self.control_sessions:
+                existing_controller = self.control_sessions[client_id].manager_id
+                self._send_control_pdu(manager_id, f"{CMD_CONTROL_DENIED}:Client đang bị điều khiển bởi {existing_controller}")
+                return False
+            
+            # Kiểm tra manager đã đang control client khác chưa
+            if manager_id in self.manager_sessions and self.manager_sessions[manager_id]["control"]:
+                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Bạn đang điều khiển client khác")
+                return False
+        
+        # Tạo ControlSession (1-1 exclusive)
+        print(f"[ControlSession] Starting: Manager({manager_id}) <-> Client({client_id})")
+        control_session = ControlSession(manager_id, client_id, self.broadcaster, self._on_control_session_done)
+        control_session.start()
+        
+        with self.lock:
+            self.control_sessions[client_id] = control_session
+            
+            # Cập nhật manager_sessions
+            if manager_id not in self.manager_sessions:
+                self.manager_sessions[manager_id] = {"view": [], "control": None}
+            self.manager_sessions[manager_id]["control"] = client_id
+        
+        # Thông báo thành công
+        self._send_control_pdu(manager_id, f"{CMD_CONTROL_STARTED}:{client_id}")
+        self._send_control_pdu(client_id, f"{CMD_CONTROL_STARTED}:{manager_id}")
+        
+        # Cập nhật danh sách client (client đang bị control)
+        self._broadcast_client_list()
+        return True
+    
+    def _stop_control_session(self, manager_id):
+        """
+        Dừng CONTROL session của manager
+        """
+        with self.lock:
+            if manager_id not in self.manager_sessions:
+                return
+            
+            client_id = self.manager_sessions[manager_id]["control"]
+            if not client_id:
+                return
+            
+            # Tìm và dừng ControlSession
+            if client_id in self.control_sessions:
+                control_session = self.control_sessions[client_id]
+                control_session.stop()
+                # _on_control_session_done sẽ được gọi tự động
+    
+    def _on_control_session_done(self, control_session, reason):
+        """
+        Callback khi ControlSession kết thúc
+        """
+        print(f"[ControlSession] Ended: {control_session.session_id}. Reason: {reason}")
+        
+        with self.lock:
+            # Xóa control session
+            if control_session.client_id in self.control_sessions:
+                del self.control_sessions[control_session.client_id]
+            
+            # Cập nhật manager_sessions
+            if control_session.manager_id in self.manager_sessions:
+                self.manager_sessions[control_session.manager_id]["control"] = None
+        
+        # Thông báo
+        self._send_control_pdu(control_session.manager_id, f"{CMD_CONTROL_STOPPED}:{control_session.client_id}")
+        self._send_control_pdu(control_session.client_id, f"{CMD_CONTROL_STOPPED}:{control_session.manager_id}")
+        
+        # Cập nhật danh sách client
+        self._broadcast_client_list()
