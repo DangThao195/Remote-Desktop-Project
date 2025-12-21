@@ -38,3 +38,4 @@ class ClientMonitor(threading.Thread):
         # Gửi lệnh lên server
         msg = f"security_alert:{type_name}|{detail}"
         self.callback(msg) # Gọi hàm send_control_pdu của ClientNetwork
+        

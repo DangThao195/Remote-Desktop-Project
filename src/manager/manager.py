@@ -68,6 +68,13 @@ class Manager(QObject):
             return False
         
         print("[Manager] Đã khởi động và đăng ký với server.")
+        
+        # Request client list ngay sau khi kết nối
+        import time
+        time.sleep(0.5)  # Đợi registration hoàn tất
+        print("[Manager] Yêu cầu danh sách client từ server...")
+        self.app.request_client_list()
+        
         return True
 
     def stop(self):
@@ -88,7 +95,8 @@ class Manager(QObject):
 
     def _on_client_list_update(self, client_list: list):
         self.client_list = client_list
-        print(f"[Manager] Danh sách client rảnh: {self.client_list}")
+        print(f"[Manager] ✅ Danh sách client rảnh từ server: {self.client_list}")
+        print(f"[Manager] Client IDs: {[c['id'] for c in client_list]}")
         self.client_list_updated.emit(client_list)
 
     def _on_session_started(self, client_id: str):
@@ -220,7 +228,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "192.168.5.159"
+    HOST = "192.168.2.31"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 
@@ -255,8 +263,8 @@ if __name__ == "__main__":
         app.current_user = f"manager_{login_dialog.username}"
         app.current_name = login_dialog.username
     
-    # Set dummy client_connected for GUI
-    app.client_connected = [("DESKTOP-7KK6GLB", "dummy_token")]
+    # [FIX] Khởi tạo client_connected trước khi tạo ManageClientsWindow
+    app.client_connected = []  # Danh sách rỗng ban đầu, sẽ được update sau
     
     from src.manager.gui.manage_clients import ManageClientsWindow
     window = ManageClientsWindow()

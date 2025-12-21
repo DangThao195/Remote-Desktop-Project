@@ -28,18 +28,31 @@ class ManageClientsWindow(QWidget):
         self.setStyleSheet(f"background-color: {DARK_BG}; color: {TEXT_LIGHT};")
         self.init_ui()
         
-        # Kết nối signals từ manager để nhận keylog và security alerts LIÊN TỤC
-        self._connect_manager_signals()
+        # Kết nối signals từ manager sẽ được gọi sau khi window hiển thị
+        # Dùng QTimer để delay cho đến khi manager_logic đã được khởi tạo
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._connect_manager_signals)  # Delay 100ms
     
     def _connect_manager_signals(self):
         """Kết nối signals từ manager logic để nhận keylog và security alerts"""
-        manager = QApplication.instance().manager_logic
-        if manager:
-            # Nhận keylog data liên tục
-            manager.input_pdu_received.connect(self.display_keylog)
-            # Nhận security alerts liên tục
-            manager.security_alert_received.connect(self.display_security_alert)
-            print("[ManageClientsWindow] Đã kết nối signals để nhận keylog và security alerts liên tục")
+        try:
+            manager = QApplication.instance().manager_logic
+            if manager:
+                # Nhận keylog data liên tục
+                manager.input_pdu_received.connect(self.display_keylog)
+                # Nhận security alerts liên tục
+                manager.security_alert_received.connect(self.display_security_alert)
+                print("[ManageClientsWindow] Đã kết nối signals để nhận keylog và security alerts liên tục")
+            else:
+                print("[ManageClientsWindow] WARN: manager_logic chưa sẵn sàng, thử lại sau...")
+                # Thử lại sau 500ms
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(500, self._connect_manager_signals)
+        except AttributeError:
+            print("[ManageClientsWindow] WARN: manager_logic chưa tồn tại, thử lại sau...")
+            # Thử lại sau 500ms
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(500, self._connect_manager_signals)
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -113,6 +126,10 @@ class ManageClientsWindow(QWidget):
 
         sidebar_layout.addWidget(self.client_list, stretch=1)
         sidebar_layout.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignBottom)
+
+        # Biến tracking cho keylogger mode
+        self.keylogger_active = False  # Có đang hiển thị keylogger hay không
+        self.session_keylog_buffer = []  # Buffer keylog trong session hiện tại
 
         # Khu vực thông tin chi tiết client
         self.info_frame = QFrame()
@@ -228,6 +245,21 @@ class ManageClientsWindow(QWidget):
             name = display_text
         self.selected_client_id = name
         
+        # CHECK MAIN SERVER STATUS - Kiểm tra client có trong manager.client_list không
+        manager = QApplication.instance().manager_logic
+        is_connected_to_main_server = False
+        
+        if manager and manager.client_list:
+            # Kiểm tra xem client có trong danh sách từ Main Server không
+            for client in manager.client_list:
+                if client['id'] == name or client.get('name') == name:
+                    is_connected_to_main_server = True
+                    print(f"[ManageClientsWindow] ✅ Client {name} đã kết nối Main Server!")
+                    break
+        
+        print(f"[ManageClientsWindow] Client {name} connected to Main Server: {is_connected_to_main_server}")
+        print(f"[ManageClientsWindow] Current client_list from server: {manager.client_list if manager else 'No manager'}")
+        
         # Kiểm tra index có hợp lệ không (tránh IndexError khi client disconnect)
         client_connected_list = QApplication.instance().client_connected
         if index >= len(client_connected_list):
@@ -241,37 +273,34 @@ class ManageClientsWindow(QWidget):
             
         token = client_connected_list[index][1]
         
-        # Kiểm tra xem có auth connection không
+        # Lấy thông tin profile từ Auth Server
         conn = QApplication.instance().conn
+        data = None
         if conn:
             try:
                 data = conn.client_profile(token)
-                status = conn.check_connected_status(token, QApplication.instance().current_user)
             except Exception as e:
                 print(f"Lỗi khi lấy thông tin client: {e}")
                 data = None
-                status = "unknown"
-        else:
-            # Không có auth service, hiển thị thông tin cơ bản
-            data = None
-            status = "connected"
         
+        # Hiển thị thông tin
         if data:
             self.lbl_username.setText(name)
             self.lbl_email.setText(data[4])
             self.lbl_fullname.setText(data[3])
-            if status.lower() == "connected":
-                self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {SPOTIFY_GREEN};")
-            else:
-                 self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: gray;")
-            self.lbl_status.setText(f"Status: {status}")
         else:
-            # Hiển thị thông tin cơ bản từ client_connected
+            # Không có profile từ Auth Server
             self.lbl_username.setText(name)
             self.lbl_email.setText("N/A")
             self.lbl_fullname.setText("N/A")
+        
+        # Status dựa trên Main Server connection, KHÔNG phải Auth Server
+        if is_connected_to_main_server:
             self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {SPOTIFY_GREEN};")
-            self.lbl_status.setText(f"Status: {status}")
+            self.lbl_status.setText("Status: connected")
+        else:
+            self.lbl_status.setStyleSheet("font-size: 11pt; font-weight: bold; color: gray;")
+            self.lbl_status.setText("Status: no connected")
 
     def open_add_client(self):
         from src.gui.add_client import AddClientWindow  
@@ -294,10 +323,12 @@ class ManageClientsWindow(QWidget):
             print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
             return
         
-        # Kiểm tra client có trong danh sách của manager không
+        # Kiểm tra client có trong danh sách từ server không (manager.client_list)
+        print(f"[ManageClientsWindow] Danh sách client từ server: {manager.client_list}")
         client_ids = [c['id'] for c in manager.client_list]
         if self.selected_client_id not in client_ids:
-            print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách rảnh!")
+            print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách rảnh từ server!")
+            print(f"[ManageClientsWindow] Available clients: {client_ids}")
             QMessageBox.warning(self, "Client Not Available", 
                               f"Client '{self.selected_client_id}' is not available. It may be disconnected or in another session.")
             return
@@ -346,6 +377,10 @@ class ManageClientsWindow(QWidget):
     def _on_screen_disconnect(self):
         """Handle disconnect button click - CHỈ disconnect session, GIỮ window"""
         print(f"[ManageClientsWindow] Screen window yêu cầu disconnect (GIỮ window)")
+        
+        # KHÔNG reset keylog buffer - vì keylog theo session của client, không theo screen session
+        # Buffer chỉ reset khi client disconnect khỏi Main Server
+        
         manager = QApplication.instance().manager_logic
         if manager:
             manager.gui_disconnect_session()
@@ -353,6 +388,9 @@ class ManageClientsWindow(QWidget):
     def _on_screen_close(self):
         """Handle close button (X) - Đóng window VÀ disconnect"""
         print(f"[ManageClientsWindow] Screen window bị đóng")
+        
+        # KHÔNG reset keylog buffer - vì keylog theo session của client
+        
         manager = QApplication.instance().manager_logic
         if manager and manager.current_session_client_id:
             print(f"[ManageClientsWindow] Auto disconnect do window đóng")
@@ -428,23 +466,58 @@ class ManageClientsWindow(QWidget):
         self.action_area.append(f"Error: {error_msg}")
     
     def view_keylogger(self):
-        """Bật hiển thị keylogger logs - chỉ keystroke, không bao gồm security alerts"""
+        """Bật hiển thị keylogger logs - hiển thị khi client đã bắt đầu dịch vụ"""
         if not self.selected_client_id:
+            self.action_area.clear()
             self.action_area.append("⚠️ Vui lòng chọn client trước!")
             return
         
+        # Bật keylogger mode
+        self.keylogger_active = True
         self.action_area.clear()
+        
+        # Kiểm tra xem client có đang online (đã bắt đầu dịch vụ) không
+        manager = QApplication.instance().manager_logic
+        client_online = False
+        
+        if manager and manager.client_list:
+            # Check xem client có trong danh sách từ Main Server không
+            for client in manager.client_list:
+                if client['id'] == self.selected_client_id or client.get('name') == self.selected_client_id:
+                    client_online = True
+                    break
+        
         keyboard_icon = "\u2328\ufe0f"  # Emoji ⌨️
-        search_icon = "\U0001F50D"  # Emoji 🔍
-        html_content = f"""
-            <div style='border-bottom: 2px solid {SPOTIFY_GREEN}; padding-bottom: 10px; margin-bottom: 10px;'>
-                <h2 style='color: {SPOTIFY_GREEN}; margin: 5px 0;'>{keyboard_icon} KEYLOGGER - GIÁM SÁT GÕ PHÍM</h2>
-                <p style='color: {SUBTEXT}; margin: 5px 0;'>Client: <b style='color: {TEXT_LIGHT};'>{self.selected_client_id}</b></p>
-                <p style='color: {SUBTEXT}; margin: 5px 0;'>Trạng thái: <b style='color: {SPOTIFY_GREEN};'>Đang theo dõi...</b></p>
-            </div>
-            <p style='color: {SUBTEXT}; font-style: italic;'>{search_icon} Nhật ký keylog sẽ hiển thị bên dưới:</p>
-        """
-        self.action_area.setHtml(html_content)
+        
+        if client_online:
+            # Client đã bắt đầu dịch vụ - hiển thị keylog buffer
+            html_content = f"""
+                <div style='border-bottom: 2px solid {SPOTIFY_GREEN}; padding-bottom: 10px; margin-bottom: 10px;'>
+                    <h3 style='color: {SPOTIFY_GREEN}; margin: 5px 0;'>{keyboard_icon} KEYLOGGER - {self.selected_client_id}</h3>
+                    <p style='color: {SUBTEXT}; margin: 5px 0; font-size: 10pt;'>Trạng thái: <b style='color: {SPOTIFY_GREEN};'>Đang theo dõi...</b></p>
+                </div>
+                <div style='color: {TEXT_LIGHT}; font-size: 10pt; margin: 10px 0;'>
+                    Lịch sử gõ phím từ khi client bắt đầu dịch vụ:
+                </div>
+            """
+            self.action_area.setHtml(html_content)
+            
+            # Hiển thị buffer hiện tại (nếu có)
+            for log_entry in self.session_keylog_buffer:
+                self.action_area.append(log_entry)
+        else:
+            # Client chưa bắt đầu dịch vụ
+            html_content = f"""
+                <div style='border-bottom: 2px solid {SUBTEXT}; padding-bottom: 10px; margin-bottom: 10px;'>
+                    <h3 style='color: {SUBTEXT}; margin: 5px 0;'>{keyboard_icon} KEYLOGGER - {self.selected_client_id}</h3>
+                    <p style='color: {SUBTEXT}; margin: 5px 0; font-size: 10pt;'>Trạng thái: <b style='color: orange;'>Chờ client bắt đầu dịch vụ...</b></p>
+                </div>
+                <div style='color: {SUBTEXT}; font-size: 10pt; margin: 10px 0; text-align: center; padding: 20px;'>
+                    ⚠️ Client chưa bắt đầu dịch vụ.<br>
+                    Keylogger sẽ tự động hiển thị khi client bấm <b>"Bắt đầu dịch vụ"</b>.
+                </div>
+            """
+            self.action_area.setHtml(html_content)
     
     def view_security_alerts(self):
         """Hiển thị thông báo vi phạm bảo mật từ client"""
@@ -465,54 +538,56 @@ class ManageClientsWindow(QWidget):
         self.action_area.setHtml(html_content)
         
     def display_keylog(self, pdu: dict):
-        """Hiển thị keylog data trong action_area (chỉ keystroke, không bao gồm security alerts)"""
+        """Hiển thị keylog data - hiển thị khi client online, không cần screen session"""
         try:
-            # INPUT PDU có trường 'input' (dict/object) hoặc 'message' (string)
-            input_data = pdu.get('input')
+            # Chỉ hiển thị nếu keylogger mode đang bật
+            if not self.keylogger_active:
+                return
+            
+            # INPUT PDU format: {"type": "input", "input": {KeyData, WindowTitle, ...}, "message": ...}
+            input_data = pdu.get('input')  # Dict đã được parse từ JSON
             message = pdu.get('message', '')
             
-            # Nếu là security alert thì bỏ qua, không hiển thị trong keylogger
+            # Debug log
+            print(f"[display_keylog] Nhận PDU: type={pdu.get('type')}, input={input_data}, message={message[:50] if message else 'None'}...")
+            
+            # Nếu là security alert thì bỏ qua
             if isinstance(message, str) and message.startswith('security_alert:'):
-                return  # Không hiển thị security alert trong keylogger
+                return
             
             from datetime import datetime
             timestamp = datetime.now().strftime("%H:%M:%S")
             
-            # Xử lý keylog data
+            # Xử lý keylog data từ dict input
             if input_data and isinstance(input_data, dict):
-                # Nếu là dict keylog data
                 key_data = input_data.get('KeyData', '')
                 window_title = input_data.get('WindowTitle', 'Unknown')
+                client_id = input_data.get('ClientID', 'Unknown')
                 logged_at = input_data.get('LoggedAt', timestamp)
                 
-                # HTML formatted log entry
+                # Chỉ hiển thị nếu là từ client đang được chọn
+                if self.selected_client_id and client_id != self.selected_client_id:
+                    print(f"[display_keylog] Bỏ qua keylog từ {client_id}, đang chọn {self.selected_client_id}")
+                    return
+                
+                # Format đơn giản như chat log - chỉ hiển thị timestamp và text
                 log_html = f"""
-                <div style='background-color: rgba(255,255,255,0.05); 
-                            padding: 8px; 
-                            margin: 5px 0; 
-                            border-left: 3px solid {SPOTIFY_GREEN};
-                            border-radius: 4px;'>
-                    <div style='color: {SPOTIFY_GREEN}; font-weight: bold;'>
-                        🔴 [{logged_at}]
-                    </div>
-                    <div style='color: {TEXT_LIGHT}; margin: 5px 0;'>
-                        📱 <b>Cửa sổ:</b> {window_title}
-                    </div>
-                    <div style='color: yellow; font-family: monospace; margin: 5px 0; padding: 5px; background-color: rgba(0,0,0,0.3);'>
-                        ⌨️ <b>{key_data}</b>
-                    </div>
+                <div style='margin: 3px 0; padding: 5px 8px;'>
+                    <span style='color: {SUBTEXT}; font-size: 9pt;'>[{logged_at}]</span>
+                    <span style='color: {TEXT_LIGHT}; font-family: monospace; margin-left: 8px;'>{key_data}</span>
                 </div>
                 """
+                
+                # Thêm vào buffer
+                self.session_keylog_buffer.append(log_html)
+                
+                # Hiển thị
                 self.action_area.append(log_html)
-            elif message and not message.startswith('security_alert:'):
-                # Nếu là message string và không phải security alert
-                log_html = f"""
-                <div style='padding: 5px; margin: 3px 0;'>
-                    <span style='color: {SUBTEXT};'>[{timestamp}]</span>
-                    <span style='color: {TEXT_LIGHT};'>{message}</span>
-                </div>
-                """
-                self.action_area.append(log_html)
+                print(f"[display_keylog] ✅ Hiển thị keylog: {key_data[:20]}...")
+            
+            else:
+                # Không có input data
+                print(f"[display_keylog] ⚠️ Không tìm thấy input data trong PDU")
             
             # Auto scroll to bottom
             scrollbar = self.action_area.verticalScrollBar()

