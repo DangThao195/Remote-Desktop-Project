@@ -194,7 +194,10 @@ class ManageScreenWindow(QWidget):
 
     def handle_mouse_event(self, event: QMouseEvent):
         """Handle mouse events"""
+        print(f"[ManageScreenWindow] 🖱️ Mouse event received, current_client_id={self.current_client_id}")
+        
         if not self.current_client_id:
+            print(f"[ManageScreenWindow] ⚠️ Bỏ qua mouse event - chưa có client_id")
             return False
 
         # Tính tọa độ normalized
@@ -280,7 +283,10 @@ class ManageScreenWindow(QWidget):
 
     def keyPressEvent(self, event: QKeyEvent):
         """Handle key press events at window level"""
+        print(f"[ManageScreenWindow] ⌨️ Key press: {event.key()}, current_client_id={self.current_client_id}")
+        
         if not self.current_client_id:
+            print(f"[ManageScreenWindow] ⚠️ Bỏ qua key press - chưa có client_id")
             super().keyPressEvent(event)
             return
         
@@ -380,6 +386,7 @@ class ManageScreenWindow(QWidget):
         print(f"[ManageScreenWindow] Session started: {client_id}")
         self.screen_label.setText(f"Connected to {client_id}")
         self.current_client_id = client_id
+        print(f"[ManageScreenWindow] 🎮 INPUT CONTROL ENABLED: current_client_id = {self.current_client_id}")
         
         # Set focus to window để bắt keyboard events
         self.setFocus()

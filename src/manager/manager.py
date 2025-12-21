@@ -109,10 +109,16 @@ class Manager(QObject):
         self.session_started.emit(client_id)
 
     def _on_session_ended(self, client_id: str):
-        print(f"[Manager] ⚠️ Phiên làm việc với '{client_id}' đã kết thúc.")
+        print(f"[Manager] ⚠️ Phiên làm việc với '{client_id}' đã kết thúc (từ server).")
         print(f"[Manager] Session kết thúc: current_session_client_id = {self.current_session_client_id}")
+        
+        # Luôn reset, không cần check
         self.current_session_client_id = None
+        print(f"[Manager] Đã reset current_session_client_id = None")
+        
+        # Emit signal
         self.session_ended.emit()
+        
         # Request client list để cập nhật danh sách
         self.app.request_client_list()
 
@@ -204,24 +210,53 @@ class Manager(QObject):
         self.app.connect_to_client(client_id)
 
     def gui_disconnect_session(self):
-        if not self.current_session_client_id:
+        client_id = self.current_session_client_id
+        if not client_id:
             print("[Manager] Không có phiên đang hoạt động (có thể đã tự động disconnect).")
             return
-        print(f"[Manager] Ngắt kết nối phiên với {self.current_session_client_id}...")
-        self.app.disconnect_session()
+        
+        print(f"[Manager] Ngắt kết nối phiên với {client_id}...")
+        
+        # Reset session ID NGAY LẬP TỨC để không nhận video frame nữa
+        self.current_session_client_id = None
+        print(f"[Manager] Đã reset current_session_client_id = None")
+        
+        # Gửi yêu cầu disconnect tới server
+        try:
+            self.app.disconnect_session()
+            print(f"[Manager] Đã gửi yêu cầu disconnect tới server")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi gửi disconnect request: {e}")
+        
+        # Request lại client list để cập nhật
+        try:
+            self.app.request_client_list()
+            print(f"[Manager] Đã request client list")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi request client list: {e}")
+        
+        # Emit signal
+        self.session_ended.emit()
+        print(f"[Manager] ✅ Disconnect hoàn tất")
 
     # --- SỬA HÀM NÀY ---
     def send_input_event(self, event: dict):
         """GUI gọi hàm này khi có sự kiện chuột/phím"""
+        print(f"[Manager] send_input_event được gọi: {event.get('type')}, current_session_client_id={self.current_session_client_id}")
+        
         if not self.current_session_client_id:
             # Session đã kết thúc, không gửi input nữa
+            print(f"[Manager] ⚠️ Không gửi input event - chưa có session!")
             return 
+        
+        print(f"[Manager] ✅ Gửi input event tới input_handler: {event}")
         # Gửi sự kiện đã được format bởi GUI
         self.input_handler.send_event(event)
 
     # --- THÊM HÀM NÀY ---
     def _on_gui_input(self, event_dict: dict):
         """Nhận signal từ GUI và gửi đi"""
+        print(f"[Manager] 🎮 Nhận được input event từ GUI: {event_dict.get('type')}, current_session_client_id={self.current_session_client_id}")
         self.send_input_event(event_dict)
 
 # --- ĐIỂM VÀO CHÍNH (THAY THẾ TEST LOOP CŨ) ---

@@ -30,15 +30,18 @@ class ClientInputHandler:
         """
         Được gọi bởi ClientNetwork khi có PDU input.
         """
-        # print(f"[DEBUG Input] Nhận PDU: {pdu}")  # Bỏ comment để giảm spam
+        print(f"[ClientInputHandler] 📥 Nhận được PDU input: type={pdu.get('type')}")
         
         if pdu.get("type") != "input":
+            print(f"[ClientInputHandler] ⚠️ PDU type không phải 'input': {pdu.get('type')}")
             return
             
         ev = pdu.get("input")
         if not ev:
             self.logger("[InputHandler] ⚠️ PDU input thiếu trường 'input'")
             return
+        
+        print(f"[ClientInputHandler] 🎮 Xử lý input event: {ev.get('type')}")
         
         # CRITICAL: Wrap toàn bộ logic trong try-catch để không crash
         try:

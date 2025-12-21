@@ -181,6 +181,8 @@ class ManagerApp:
         self._send_control_pdu(CMD_DISCONNECT)
 
     def send_input(self, event: dict):
+        print(f"[ManagerApp] 📤 Gửi input event: {event.get('type')}")
         seq = self._next_seq()
         pdu = self.builder.build_input_pdu(seq, event)
+        print(f"[ManagerApp] PDU được build: seq={seq}, size={len(pdu)} bytes")
         self._send_mcs_pdu(CHANNEL_INPUT, pdu)

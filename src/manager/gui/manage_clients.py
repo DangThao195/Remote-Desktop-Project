@@ -387,18 +387,32 @@ class ManageClientsWindow(QWidget):
     
     def _on_screen_close(self):
         """Handle close button (X) - Đóng window VÀ disconnect"""
-        print(f"[ManageClientsWindow] Screen window bị đóng")
+        print(f"[ManageClientsWindow] ⚠️ Screen window bị đóng - Bắt đầu cleanup...")
         
         # KHÔNG reset keylog buffer - vì keylog theo session của client
         
         manager = QApplication.instance().manager_logic
-        if manager and manager.current_session_client_id:
-            print(f"[ManageClientsWindow] Auto disconnect do window đóng")
-            manager.gui_disconnect_session()
+        if manager:
+            # Force cleanup session, không cần check current_session_client_id
+            if manager.current_session_client_id:
+                print(f"[ManageClientsWindow] Force disconnect session: {manager.current_session_client_id}")
+                manager.gui_disconnect_session()
+                # Đợi một chút để disconnect hoàn tất
+                import time
+                time.sleep(0.2)
+            else:
+                print(f"[ManageClientsWindow] Không có session đang active, không cần disconnect")
+            
+            # Force reset current_session_client_id (trong trường hợp server chưa respond)
+            manager.current_session_client_id = None
+            print(f"[ManageClientsWindow] Đã reset current_session_client_id")
         
-        # Cleanup
+        # Cleanup screen window reference
         if hasattr(self, 'screen_window'):
             self.screen_window = None
+            print(f"[ManageClientsWindow] Đã cleanup screen_window reference")
+        
+        print(f"[ManageClientsWindow] ✅ Cleanup hoàn tất")
             
     def update_client_list(self, client_list: list):
         """Update the client list from manager logic"""
@@ -558,32 +572,61 @@ class ManageClientsWindow(QWidget):
             from datetime import datetime
             timestamp = datetime.now().strftime("%H:%M:%S")
             
-            # Xử lý keylog data từ dict input
+            # Xử lý input data từ dict
             if input_data and isinstance(input_data, dict):
-                key_data = input_data.get('KeyData', '')
-                window_title = input_data.get('WindowTitle', 'Unknown')
-                client_id = input_data.get('ClientID', 'Unknown')
-                logged_at = input_data.get('LoggedAt', timestamp)
+                data_type = input_data.get('type', 'keylog')  # 'keylog' hoặc 'window_title'
                 
-                # Chỉ hiển thị nếu là từ client đang được chọn
-                if self.selected_client_id and client_id != self.selected_client_id:
-                    print(f"[display_keylog] Bỏ qua keylog từ {client_id}, đang chọn {self.selected_client_id}")
-                    return
+                # --- XỬ LÝ WINDOW TITLE ---
+                if data_type == 'window_title':
+                    window_title = input_data.get('WindowTitle', 'Unknown')
+                    process_name = input_data.get('ProcessName', 'Unknown')
+                    client_id = input_data.get('ClientID', 'Unknown')
+                    logged_at = input_data.get('LoggedAt', timestamp)
+                    
+                    # Chỉ hiển thị nếu là từ client đang được chọn
+                    if self.selected_client_id and client_id != self.selected_client_id:
+                        print(f"[display_keylog] Bỏ qua window title từ {client_id}, đang chọn {self.selected_client_id}")
+                        return
+                    
+                    # Format window title log
+                    log_html = f"""
+                    <div style='margin: 4px 0; padding: 6px 10px; background-color: rgba(76, 175, 80, 0.1); border-left: 3px solid #4CAF50; border-radius: 4px;'>
+                        <span style='color: {SUBTEXT}; font-size: 9pt;'>[{logged_at}]</span>
+                        <span style='color: #4CAF50; font-weight: bold; margin-left: 8px;'>🪟</span>
+                        <span style='color: {TEXT_LIGHT}; margin-left: 4px;'>{window_title}</span>
+                        <span style='color: {SUBTEXT}; font-size: 9pt; margin-left: 8px;'>({process_name})</span>
+                    </div>
+                    """
+                    
+                    self.action_area.append(log_html)
+                    print(f"[display_keylog] ✅ Hiển thị window title: {window_title}")
                 
-                # Format đơn giản như chat log - chỉ hiển thị timestamp và text
-                log_html = f"""
-                <div style='margin: 3px 0; padding: 5px 8px;'>
-                    <span style='color: {SUBTEXT}; font-size: 9pt;'>[{logged_at}]</span>
-                    <span style='color: {TEXT_LIGHT}; font-family: monospace; margin-left: 8px;'>{key_data}</span>
-                </div>
-                """
-                
-                # Thêm vào buffer
-                self.session_keylog_buffer.append(log_html)
-                
-                # Hiển thị
-                self.action_area.append(log_html)
-                print(f"[display_keylog] ✅ Hiển thị keylog: {key_data[:20]}...")
+                # --- XỬ LÝ KEYLOG ---
+                else:
+                    key_data = input_data.get('KeyData', '')
+                    window_title = input_data.get('WindowTitle', 'Unknown')
+                    client_id = input_data.get('ClientID', 'Unknown')
+                    logged_at = input_data.get('LoggedAt', timestamp)
+                    
+                    # Chỉ hiển thị nếu là từ client đang được chọn
+                    if self.selected_client_id and client_id != self.selected_client_id:
+                        print(f"[display_keylog] Bỏ qua keylog từ {client_id}, đang chọn {self.selected_client_id}")
+                        return
+                    
+                    # Format đơn giản như chat log - chỉ hiển thị timestamp và text
+                    log_html = f"""
+                    <div style='margin: 3px 0; padding: 5px 8px;'>
+                        <span style='color: {SUBTEXT}; font-size: 9pt;'>[{logged_at}]</span>
+                        <span style='color: {TEXT_LIGHT}; font-family: monospace; margin-left: 8px;'>{key_data}</span>
+                    </div>
+                    """
+                    
+                    # Thêm vào buffer
+                    self.session_keylog_buffer.append(log_html)
+                    
+                    # Hiển thị
+                    self.action_area.append(log_html)
+                    print(f"[display_keylog] ✅ Hiển thị keylog: {key_data[:20]}...")
             
             else:
                 # Không có input data
