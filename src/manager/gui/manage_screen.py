@@ -19,10 +19,14 @@ class ManageScreenWindow(QWidget):
     close_requested = pyqtSignal()
     input_event_generated = pyqtSignal(dict)
 
-    def __init__(self, client_id: str):
+    def __init__(self, client_id: str, mode: str = "view"):
+        """
+        mode: 'view' (read-only, 1-to-many) or 'control' (with input, 1-to-1)
+        """
         super().__init__()
         self.client_id = client_id
-        self.setWindowTitle(f"Remote Desktop - {client_id}")
+        self.mode = mode  # 'view' or 'control'
+        self.setWindowTitle(f"{'View' if mode == 'view' else 'Control'} - {client_id}")
         self.setMinimumSize(1200, 700)
         self.setStyleSheet(f"background-color: {DARK_BG}; color: {TEXT_LIGHT};")
 
@@ -193,7 +197,11 @@ class ManageScreenWindow(QWidget):
         return super().eventFilter(obj, event)
 
     def handle_mouse_event(self, event: QMouseEvent):
-        """Handle mouse events"""
+        """Handle mouse events - Only in CONTROL mode"""
+        # VIEW mode: read-only, không xử lý input
+        if self.mode == "view":
+            return False
+        
         print(f"[ManageScreenWindow] 🖱️ Mouse event received, current_client_id={self.current_client_id}")
         
         if not self.current_client_id:
@@ -289,7 +297,12 @@ class ManageScreenWindow(QWidget):
         return False
 
     def keyPressEvent(self, event: QKeyEvent):
-        """Handle key press events at window level"""
+        """Handle key press events at window level - Only in CONTROL mode"""
+        # VIEW mode: read-only, không xử lý input
+        if self.mode == "view":
+            super().keyPressEvent(event)
+            return
+        
         print(f"[ManageScreenWindow] ⌨️ Key press: {event.key()}, current_client_id={self.current_client_id}")
         
         if not self.current_client_id:
@@ -317,7 +330,12 @@ class ManageScreenWindow(QWidget):
             super().keyPressEvent(event)
     
     def keyReleaseEvent(self, event: QKeyEvent):
-        """Handle key release events at window level"""
+        """Handle key release events at window level - Only in CONTROL mode"""
+        # VIEW mode: read-only, không xử lý input
+        if self.mode == "view":
+            super().keyReleaseEvent(event)
+            return
+        
         if not self.current_client_id:
             super().keyReleaseEvent(event)
             return

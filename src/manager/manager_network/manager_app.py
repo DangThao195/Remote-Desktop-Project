@@ -165,15 +165,22 @@ class ManagerApp:
             return self.seq
 
     def _send_mcs_pdu(self, channel_id: int, pdu_bytes: bytes):
-        if not self.running or not self.client.sock:
+        if not self.running:
+            print(f"[ManagerApp] ⚠️ Không gửi được - app not running")
+            return
+        if not self.client.sock:
+            print(f"[ManagerApp] ⚠️ Không gửi được - socket is None")
             return
         try:
             mcs_frame = MCSLite.build(channel_id, pdu_bytes)
             tpkt_packet = TPKTLayer.pack(mcs_frame)
             with self.lock:
                 self.client.sock.sendall(tpkt_packet)
+            print(f"[ManagerApp] ✅ Đã gửi PDU tới channel {channel_id}, size: {len(tpkt_packet)} bytes")
         except Exception as e:
-            print(f"[ManagerApp] Lỗi gửi PDU: {e}")
+            print(f"[ManagerApp] ❌ Lỗi gửi PDU: {e}")
+            import traceback
+            traceback.print_exc()
             self._on_receiver_done()
 
     def _send_control_pdu(self, message: str):
@@ -183,10 +190,17 @@ class ManagerApp:
 
     def register(self):
         print("[ManagerApp] Đăng ký với server...")
+
+        # Đăng ký nhanh để được gán role Manager ngay cả khi Auth DB gặp sự cố
+        register_msg = f"{CMD_REGISTER}manager:{self.username or self.client.manager_id}"
+        print(f"[ManagerApp] Sending REGISTER: {register_msg}")
+        self._send_control_pdu(register_msg)
+
+        # Nếu có thông tin đăng nhập, gửi thêm LOGIN để server có thể xác thực (nếu DB sẵn sàng)
         if self.username and self.password:
-            self._send_control_pdu(f"{CMD_LOGIN}{self.username}:{self.password}:manager")
-        else:
-            self._send_control_pdu(f"{CMD_REGISTER}manager")
+            login_msg = f"{CMD_LOGIN}{self.username}:{self.password}:manager"
+            print(f"[ManagerApp] Sending LOGIN: {login_msg}")
+            self._send_control_pdu(login_msg)
 
     def request_client_list(self):
         self._send_control_pdu(CMD_LIST_CLIENTS)

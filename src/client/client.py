@@ -36,7 +36,7 @@ class Client:
     Lớp "keo" (glue) cấp cao nhất.
     Khởi tạo và kết nối tất cả các thành phần.
     """
-    def __init__(self, host, port, fps=10, logger=None, user_info=None):
+    def __init__(self, host, port, fps=0.33, logger=None, user_info=None):
         self.host = host
         self.port = port
         self.fps = fps
@@ -67,8 +67,10 @@ class Client:
             cafile=CA_FILE, 
             logger=self.logger
         )
-        # Screen sharing: Chất lượng cao (85), FPS thấp (0.2 = 5s/frame), Full HD
-        self.screenshot = ClientScreenshot(fps=fps, quality=85, max_dimension=1920)
+        # Screen sharing: mặc định 1 frame/3s, có thể tăng tốc khi CONTROL
+        self.base_screen_fps = fps or 0.33
+        self.control_screen_fps = 2.0  # CONTROL mode: nhanh hơn (~2 fps)
+        self.screenshot = ClientScreenshot(fps=self.base_screen_fps, quality=85, max_dimension=1920)
         self.sender = ClientSender(self.network) # Truyền network
         # Input control: Vẫn real-time, không phụ thuộc vào screenshot FPS
         self.input_handler = ClientInputHandler(logger=self.logger)
@@ -88,6 +90,7 @@ class Client:
         
         # Track session state
         self.in_session = False
+        self.connected_managers = set()
         # Tách riêng screen sharing và remote control
         self.screen_sharing_enabled = True  # Có thể bật/tắt screen sharing
         self.remote_control_enabled = True  # Remote control luôn bật khi in_session 
@@ -454,18 +457,13 @@ class Client:
             if seq % 100 == 0:  # Log thỉnh thoảng
                 self.logger(f"[Client] 🚫 Screen sharing bị tắt, không gửi frame")
             return
-        
-        # Tất cả các role đều được phép gửi frame (screen sharing)
-        if self.in_session:
-            frame_type = "FULL" if bbox is None else "RECT"
-            # In log thỉnh thoảng để không spam
-            if seq % 30 == 0:  # Mỗi 30 frame in 1 lần
-                self.logger(f"[Client] 📹 Gửi {frame_type} frame #{seq}, size: {len(jpg_bytes)} bytes")
-            return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
-        else:
-            # In cảnh báo nếu không trong session
-            if seq % 100 == 0:  # Mỗi 100 frame in 1 lần
-                self.logger(f"[Client] ⚠️ KHÔNG gửi frame vì chưa có session (in_session={self.in_session})")
+
+        # Gửi frame định kỳ dù chưa có manager; server sẽ chỉ forward khi có viewer/controller
+        frame_type = "FULL" if bbox is None else "RECT"
+        if seq % 30 == 0:
+            self.logger(f"[Client] 📹 Gửi {frame_type} frame #{seq}, size: {len(jpg_bytes)} bytes (in_session={self.in_session})")
+
+        return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
 
     def _on_control_pdu(self, pdu: dict):
         msg = pdu.get("message", "")
@@ -489,6 +487,9 @@ class Client:
             manager_id = msg.split(":")[1] if ":" in msg else "Manager"
             self.logger(f"[Client] ==> Manager {manager_id} đang xem màn hình (VIEW mode)")
             self.in_session = True
+            self.connected_managers.add(manager_id)
+            self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
             self.screenshot.force_full_frame()
         
         # Xử lý lệnh CONTROL mới (xem + điều khiển)
@@ -497,25 +498,61 @@ class Client:
             self.logger(f"[Client] ==> Manager {manager_id} đang điều khiển (CONTROL mode)")
             self.in_session = True
             self.remote_control_enabled = True  # Bật điều khiển từ xa
+            self.connected_managers.add(manager_id)
+            self._set_capture_fps(self.control_screen_fps)
+            self._log_connected_managers()
             self.screenshot.force_full_frame()
             
         elif msg == "session_ended":
             self.logger("[Client] Session ended")
             self.in_session = False
+            self.connected_managers.clear()
+            self._set_capture_fps(self.base_screen_fps)
         
         # Xử lý kết thúc VIEW
         elif msg.startswith("view_ended"):
             self.logger("[Client] VIEW session ended")
-            # Kiểm tra còn viewer nào khác không
-            # Nếu không còn viewer và không có controller, tắt session
-            if not self.in_session:  # Nếu không còn session nào
+            manager_id = msg.split(":")[1] if ":" in msg else None
+            if manager_id:
+                self.connected_managers.discard(manager_id)
+            if not self.connected_managers:
                 self.in_session = False
+                self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
         
         # Xử lý kết thúc CONTROL
         elif msg.startswith("control_ended"):
             self.logger("[Client] CONTROL session ended")
             self.in_session = False
             self.remote_control_enabled = False  # Tắt điều khiển từ xa
+            manager_id = msg.split(":")[1] if ":" in msg else None
+            if manager_id:
+                self.connected_managers.discard(manager_id)
+            if not self.connected_managers:
+                self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
+
+        # Một số server có thể gửi *_stopped thay vì *_ended
+        elif msg.startswith("view_stopped"):
+            self.logger("[Client] VIEW session stopped")
+            manager_id = msg.split(":")[1] if ":" in msg else None
+            if manager_id:
+                self.connected_managers.discard(manager_id)
+            if not self.connected_managers:
+                self.in_session = False
+                self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
+
+        elif msg.startswith("control_stopped"):
+            self.logger("[Client] CONTROL session stopped")
+            manager_id = msg.split(":")[1] if ":" in msg else None
+            self.remote_control_enabled = False
+            if manager_id:
+                self.connected_managers.discard(manager_id)
+            if not self.connected_managers:
+                self.in_session = False
+                self._set_capture_fps(self.base_screen_fps)
+            self._log_connected_managers()
             
         elif msg == "request_refresh":
             if self.in_session:
@@ -533,6 +570,18 @@ class Client:
             
         elif msg == "disable_remote_control":
             self.disable_remote_control()
+
+    def _set_capture_fps(self, fps_value: float):
+        """Điều chỉnh FPS capture động cho các chế độ VIEW/CONTROL."""
+        try:
+            self.screenshot.fps = max(fps_value, 0.05)
+            self.logger(f"[Client] 🎞️ Cập nhật FPS capture = {self.screenshot.fps} fps")
+        except Exception as e:
+            self.logger(f"[Client] ⚠️ Không thể cập nhật FPS: {e}")
+
+    def _log_connected_managers(self):
+        managers = ", ".join(sorted(self.connected_managers)) if self.connected_managers else "(none)"
+        self.logger(f"[Client] 🔗 Managers đang kết nối: {managers}")
         
     def _on_input_pdu_blocked(self, pdu: dict):
         """Xử lý khi nhận input PDU nhưng không có quyền"""

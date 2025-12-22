@@ -181,7 +181,32 @@ class Manager(QObject):
         self.cursor_pdu_received.emit(pdu) # Gửi thẳng dict PDU lên GUI/Viewer
 
     def gui_connect_to_client(self, client_id: str):
-        print(f"[Manager] gui_connect_to_client được gọi với client_id: {client_id}")
+        """Legacy method - calls control mode by default"""
+        print(f"[Manager] gui_connect_to_client (legacy) -> redirecting to gui_control_client")
+        self.gui_control_client(client_id)
+    
+    def gui_view_client(self, client_id: str):
+        """View client screen (1-to-many, read-only, 3-5s/frame)"""
+        print(f"[Manager] gui_view_client được gọi với client_id: {client_id}")
+        
+        client_ids = [c['id'] for c in self.client_list]
+        print(f"[Manager] Danh sách client IDs hiện tại: {client_ids}")
+        
+        if client_id not in client_ids:
+            print(f"[Manager] Client {client_id} không trong danh sách")
+            return
+        
+        # VIEW mode không cần check current_session vì có thể view nhiều client
+        print(f"[Manager] Gửi yêu cầu VIEW tới client: {client_id}")
+        self.app.connect_to_client(client_id, mode="view")
+        
+        # Set session ID để nhận video
+        if not self.current_session_client_id:
+            self.current_session_client_id = client_id
+    
+    def gui_control_client(self, client_id: str):
+        """Control client (1-to-1 exclusive, realtime)"""
+        print(f"[Manager] gui_control_client được gọi với client_id: {client_id}")
         
         # Nếu đã có session với client này, không làm gì
         if self.current_session_client_id == client_id:
@@ -191,31 +216,59 @@ class Manager(QObject):
         # Nếu đang có session với client KHÁC, disconnect trước
         if self.current_session_client_id and self.current_session_client_id != client_id:
             print(f"[Manager] Đang trong phiên với {self.current_session_client_id}. Disconnect trước.")
-            self.gui_disconnect_session()
+            self.gui_disconnect_session(mode="control")
             import time
-            time.sleep(0.3)  # Chờ disconnect hoàn tất
+            time.sleep(0.3)
         
-        # Kiểm tra client_id có trong danh sách không (không block nếu không có)
         client_ids = [c['id'] for c in self.client_list]
         print(f"[Manager] Danh sách client IDs hiện tại: {client_ids}")
         
         if client_id not in client_ids:
             print(f"[Manager] Client {client_id} chưa trong danh sách. Vẫn thử kết nối...")
         
-        # Gán ID ngay lập tức để nhận video frame
+        # Gán ID để nhận video frame
         print(f"[Manager] Đặt session ID dự kiến: {client_id}")
         self.current_session_client_id = client_id 
         
-        print(f"[Manager] Đang gửi yêu cầu kết nối tới client: {client_id}")
-        self.app.connect_to_client(client_id)
+        print(f"[Manager] Gửi yêu cầu CONTROL tới client: {client_id}")
+        self.app.connect_to_client(client_id, mode="control")
 
-    def gui_disconnect_session(self):
+    def gui_disconnect_view(self, client_id):
+        """Ngắt kết nối VIEW session (chỉ xem màn hình)"""
+        if not client_id:
+            print("[Manager] Không có client_id để disconnect VIEW")
+            return
+        
+        print(f"[Manager] Ngắt kết nối VIEW session với {client_id}...")
+        
+        # Reset session ID NGAY LẬP TỨC
+        if self.current_session_client_id == client_id:
+            self.current_session_client_id = None
+            print(f"[Manager] Đã reset current_session_client_id = None")
+        
+        # Gửi yêu cầu stop_view tới server
+        try:
+            self.app.disconnect_session(mode="view")
+            print(f"[Manager] Đã gửi yêu cầu stop_view tới server")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi gửi disconnect VIEW request: {e}")
+        
+        # Request lại client list để cập nhật
+        try:
+            self.app.request_client_list()
+            print(f"[Manager] Đã request client list")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi request client list: {e}")
+        
+        print(f"[Manager] ✅ VIEW disconnect hoàn tất")
+
+    def gui_disconnect_session(self, mode="control"):
         client_id = self.current_session_client_id
         if not client_id:
             print("[Manager] Không có phiên đang hoạt động (có thể đã tự động disconnect).")
             return
         
-        print(f"[Manager] Ngắt kết nối phiên với {client_id}...")
+        print(f"[Manager] Ngắt kết nối {mode.upper()} session với {client_id}...")
         
         # Reset session ID NGAY LẬP TỨC để không nhận video frame nữa
         self.current_session_client_id = None
@@ -223,8 +276,8 @@ class Manager(QObject):
         
         # Gửi yêu cầu disconnect tới server
         try:
-            self.app.disconnect_session()
-            print(f"[Manager] Đã gửi yêu cầu disconnect tới server")
+            self.app.disconnect_session(mode=mode)
+            print(f"[Manager] Đã gửi yêu cầu disconnect {mode} tới server")
         except Exception as e:
             print(f"[Manager] Lỗi khi gửi disconnect request: {e}")
         
@@ -263,7 +316,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "192.168.5.142"
+    HOST = "192.168.2.193"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 
